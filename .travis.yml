@@ -1,33 +1,51 @@
-# Travis configuration file using the build matrix feature
-# Read more under http://docs.travis-ci.com/user/build-configuration/
-# THIS SCRIPT IS SUPPOSED TO BE AN EXAMPLE. MODIFY IT ACCORDING TO YOUR NEEDS!
-
 sudo: false
+
 language: python
-virtualenv:
-  system_site_packages: true
-matrix:
-  include:
-    - python: 3.4
-      env: DISTRIB="ubuntu" TOX_PYTHON_VERSION="py34" COVERAGE="true"
-    - env: DISTRIB="conda" PYTHON_VERSION="3.6" COVERAGE="false"
+
+python:
+  - '3.5'
+#  - '3.6'
+#  - '3.7'
+
+env:
+  - PANDAS='0.24.1'
+#  - PANDAS='0.24.0'
+#
+#  - PANDAS='0.23.4'
+#  - PANDAS='0.23.3'
+#  - PANDAS='0.23.2'
+#  - PANDAS='0.23.1'
+#  - PANDAS='0.23.0'
+#
+#  - PANDAS='0.22.0'
+#
+#  - PANDAS='0.21.1'
+#  - PANDAS='0.21.0'
+#
+#  - PANDAS='0.20.3'
+#  - PANDAS='0.20.2'
+#  - PANDAS='0.20.1'
+#  - PANDAS='0.20.0'
+#
+#  - PANDAS='0.19.2'
+#  - PANDAS='0.19.1'
+#  - PANDAS='0.19.0'
+#
+  - SPARK='2.4.0'
+#  - SPARK='2.3.1'
+
 install:
+  - echo "Got to install section"
+  - travis_retry pip install --upgrade pip
+  - travis_retry pip install coveralls, flake8, tox
   - source tests/travis_install.sh
-  - pip install -r requirements.txt
-  # ^  DEPRECATION WARNING:
-  # The automatic creation of a `requirements.txt` file is deprecated.
-  # See `Dependency Management` in the docs for other options.
-before_script:
-  - git config --global user.email "you@example.com"
-  - git config --global user.name "Your Name"
+#  - travis_retry pip install virtualenv
+
 script:
   - python setup.py test
   # ^  Change here if using tox
+  -
 after_success:
-  - if [[ "$COVERAGE" == "true" ]]; then coveralls || echo "failed"; fi
-after_script:
-  - travis-cleanup
-cache:
-  pip: true
-  directories:
-    - $HOME/miniconda
+  - coveralls --verbose
+  -
+cache: pip
