@@ -37,7 +37,7 @@ env:
 install:
   - echo "Got to install section"
   - travis_retry pip install --upgrade pip
-  - travis_retry pip install coveralls, flake8, tox
+  - travis_retry pip install coveralls flake8 tox
   - source tests/travis_install.sh
 #  - travis_retry pip install virtualenv
 
