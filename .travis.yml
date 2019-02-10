@@ -42,10 +42,9 @@ install:
 #  - travis_retry pip install virtualenv
 
 script:
-  - python setup.py test
-  # ^  Change here if using tox
-  -
+  - tox -e $(echo py$TRAVIS_PYTHON_VERSION-$TOX_ENV_STRING | tr -d .) -- --with-coverage
+
 after_success:
   - coveralls --verbose
-  -
+
 cache: pip
