@@ -8,41 +8,39 @@ python:
 #  - '3.7'
 
 env:
-  - PANDAS='0.24.1'
-#  - PANDAS='0.24.0'
+  - ENV_STRING = 'pandas0.24.1'
+#  - ENV_STRING = 'pandas0.24.0'
 #
-#  - PANDAS='0.23.4'
-#  - PANDAS='0.23.3'
-#  - PANDAS='0.23.2'
-#  - PANDAS='0.23.1'
-#  - PANDAS='0.23.0'
+#  - ENV_STRING = 'pandas0.23.4'
+#  - ENV_STRING = 'pandas0.23.3'
+#  - ENV_STRING = 'pandas0.23.2'
+#  - ENV_STRING = 'pandas0.23.1'
+#  - ENV_STRING = 'pandas0.23.0'
 #
-#  - PANDAS='0.22.0'
+#  - ENV_STRING = 'pandas0.22.0'
 #
-#  - PANDAS='0.21.1'
-#  - PANDAS='0.21.0'
+#  - ENV_STRING = 'pandas0.21.1'
+#  - ENV_STRING = 'pandas0.21.0'
 #
-#  - PANDAS='0.20.3'
-#  - PANDAS='0.20.2'
-#  - PANDAS='0.20.1'
-#  - PANDAS='0.20.0'
+#  - ENV_STRING = 'pandas0.20.3'
+#  - ENV_STRING = 'pandas0.20.2'
+#  - ENV_STRING = 'pandas0.20.1'
+#  - ENV_STRING = 'pandas0.20.0'
 #
-#  - PANDAS='0.19.2'
-#  - PANDAS='0.19.1'
-#  - PANDAS='0.19.0'
+#  - ENV_STRING = 'pandas0.19.2'
+#  - ENV_STRING = 'pandas0.19.1'
+#  - ENV_STRING = 'pandas0.19.0'
 #
-  - SPARK='2.4.0'
-#  - SPARK='2.3.1'
+  - ENV_STRING = 'pyspark2.4.0'
+#  - ENV_STRING = 'pyspark2.3.1'
 
 install:
   - echo "Got to install section"
   - travis_retry pip install --upgrade pip
   - travis_retry pip install coveralls flake8 tox
-  - source tests/travis_install.sh
-#  - travis_retry pip install virtualenv
 
 script:
-  - tox -e $(echo py$TRAVIS_PYTHON_VERSION-$TOX_ENV_STRING | tr -d .)
+  - tox -e $(echo py$TRAVIS_PYTHON_VERSION-$ENV_STRING | tr -d .)
 
 after_success:
   - coveralls --verbose
