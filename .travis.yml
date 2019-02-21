@@ -40,6 +40,7 @@ install:
   - travis_retry pip install coveralls flake8 tox
 
 script:
+  - echo py$TRAVIS_PYTHON_VERSION-$ENV_STRING | tr -d .
   - tox -e $(echo py$TRAVIS_PYTHON_VERSION-$ENV_STRING | tr -d .)
 
 after_success:
