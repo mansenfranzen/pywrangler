@@ -1,15 +1,18 @@
-==========
-tswrangler
-==========
+===========================================
+tswrangler - data wrangling for time series
+===========================================
 
+**tswrangler** is a collection of data wrangling implementations tailored for
+time series. It aims to provide well tested solutions for commonly used tasks
+such as:
 
-Add a short description here!
+- extracting intervals (given start and end values)
+- mapping timestamps to time spans
+- deduplicating overlapping time spans
+- removing intermediate values
 
-
-Description
-===========
-
-A longer description of your project goes here...
+The reference implementation is built on top of pandas. Additionally,
+distributed computation frameworks like pyspark and dask are supported.
 
 
 Note
