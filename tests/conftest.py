@@ -56,7 +56,7 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope="session")
-def spark_session():
+def spark(request):
     """Provide session wide Spark Session to avoid expensive recreation for
     each test.
 
@@ -66,6 +66,10 @@ def spark_session():
 
     try:
         from pyspark.sql import SparkSession
-        return SparkSession.builder.getOrCreate()
+        spark = SparkSession.builder.getOrCreate()
+
+        request.addfinalizer(lambda: spark.stop())
+        return spark
+
     except ImportError:
         pytest.skip("Pyspark not available.")
