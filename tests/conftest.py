@@ -41,14 +41,15 @@ def pytest_collection_modifyitems(config, items):
 
         tox_env = os.environ.get("TSWRANGLER_TEST_ENV", "").lower()
         run_env = skip_item in tox_env
-        run_cmd = config.getoption(f"--{skip_item}")
+        run_cmd = config.getoption("--{}".format(skip_item))
 
         # do not skip tests
         if run_env or run_cmd:
             continue
 
         # mark tests to be skipped
-        skip = pytest.mark.skip(reason=f"{skip_item} test not activated")
+        reason = "{} test not activated".format(skip_item)
+        skip = pytest.mark.skip(reason=reason)
         for item in items:
             if skip_item in item.keywords:
                 item.add_marker(skip)
