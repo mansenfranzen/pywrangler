@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
-from tswrangler.skeleton import fib
+from pywrangler.skeleton import fib
 
 __author__ = "mansenfranzen"
 __copyright__ = "mansenfranzen"
