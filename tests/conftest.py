@@ -33,13 +33,13 @@ def pytest_addoption(parser):
 
 def pytest_collection_modifyitems(config, items):
     """By default, pyspark and dask tests are skipped if not otherwise declared
-    via command line or the TSWRANGLER_TEST_ENV environment variable.
+    via command line or the PYWRANGLER_TEST_ENV environment variable.
 
     """
 
     for skip_item in ("pyspark", "dask"):
 
-        tox_env = os.environ.get("TSWRANGLER_TEST_ENV", "").lower()
+        tox_env = os.environ.get("PYWRANGLER_TEST_ENV", "").lower()
         run_env = skip_item in tox_env
         run_cmd = config.getoption("--{}".format(skip_item))
 
