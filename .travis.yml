@@ -39,6 +39,8 @@ addons:
     packages:
       - oracle-java8-set-default
 
+dist: xenial
+
 install:
   - echo $JAVA_HOME
   - travis_retry pip install --upgrade pip
