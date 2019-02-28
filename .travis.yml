@@ -34,6 +34,8 @@ env:
   - ENV_STRING=pyspark2.4.0
 #  - ENV_STRING=pyspark2.3.1
 
+dist: xenial
+
 install:
   - travis_retry pip install --upgrade pip
   - travis_retry pip install --upgrade setuptools
