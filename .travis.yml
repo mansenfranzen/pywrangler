@@ -7,13 +7,6 @@ python:
   - '3.6'
   - '3.7'
 
-matrix:
-  include:
-    - python: '3.7'
-      dist: xenial
-      sudo: true
-      jdk: openjdk8
-
 env:
   - ENV_STRING=pandas0.24.1
 #  - ENV_STRING=pandas0.24.0
@@ -40,6 +33,11 @@ env:
 #
   - ENV_STRING=pyspark2.4.0
 #  - ENV_STRING=pyspark2.3.1
+
+addons:
+  apt:
+    packages:
+      - oracle-java8-set-default
 
 install:
   - echo $JAVA_HOME
