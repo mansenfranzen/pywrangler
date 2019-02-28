@@ -8,7 +8,6 @@ import inspect
 from pywrangler.util import _pprint
 
 
-
 class BaseWrangler:
     """Defines the basic interface common to all data wranglers.
 
@@ -38,7 +37,7 @@ class BaseWrangler:
 
     See also
     --------
-    Sklearn contributor: guide https://scikit-learn.org/stable/developers/contributing.html#rolling-your-own-estimator
+    https://scikit-learn.org/stable/developers/contributing.html
 
     """
 
@@ -85,7 +84,7 @@ class BaseWrangler:
         """
 
         valid_params = self.get_params()
-        for key, value in params:
+        for key, value in params.items():
             if key not in valid_params:
                 raise ValueError('Invalid parameter {} for wrangler {}. '
                                  'Check the list of available parameters '
@@ -107,8 +106,8 @@ class BaseWrangler:
 
         template = '{wrangler_name} ({computation_engine})\n\n{parameters}'\
 
-        parameters = _pprint.header("Parameters", 3) +\
-                     _pprint.enumeration(self.get_params().items(), 3)
+        parameters = (_pprint.header("Parameters", 3) +
+                      _pprint.enumeration(self.get_params().items(), 3))
 
         _repr = template.format(wrangler_name=self.__class__.__name__,
                                 computation_engine=self.computation_engine,
@@ -118,6 +117,3 @@ class BaseWrangler:
             _repr += "\n\n   Note: Does not preserve sample size."
 
         return _repr
-
-
-
