@@ -87,7 +87,7 @@ def enumeration(values: ENUM, indent: int = 0, bullet_char: str = "-") -> str:
 
     if isinstance(values, dict):
         _values = ["{key}: {value}".format(key=key, value=value)
-                   for key, value in values.items()]
+                   for key, value in sorted(values.items())]
     else:
         _values = values
 
