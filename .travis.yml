@@ -1,11 +1,11 @@
-sudo: false
+# sudo: false
 
 language: python
 
 python:
   - '3.5'
-#  - '3.6'
-#  - '3.7'
+  - '3.6'
+  - '3.7'
 
 env:
   - ENV_STRING=pandas0.24.1
@@ -34,8 +34,15 @@ env:
   - ENV_STRING=pyspark2.4.0
 #  - ENV_STRING=pyspark2.3.1
 
+
+dist: xenial
+
+before_install:
+  - source tests/travis_java_install.sh
+
 install:
   - travis_retry pip install --upgrade pip
+  - travis_retry pip install --upgrade setuptools
   - travis_retry pip install coveralls flake8 tox
 
 script:
