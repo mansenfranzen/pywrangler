@@ -56,4 +56,6 @@ def test_pyspark_pandas_interaction(spark):
     df_spark = spark.createDataFrame(df_pandas)
     df_converted = df_spark.toPandas()
 
+    print("JJava:", os.environ.get["JAVA_HOME", "JAVA_HOME_NOT_FOUND"])
+
     pd.testing.assert_frame_equal(df_pandas, df_converted)
