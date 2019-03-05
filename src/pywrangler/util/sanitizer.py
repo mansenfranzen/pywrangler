@@ -23,8 +23,12 @@ def ensure_tuple(values: Any) -> Tuple[Any]:
 
     """
 
+    # None remains None
+    if values is None:
+        return None
+
     # if not iterable, return tuple with single value
-    if not isinstance(values, collections.Iterable):
+    elif not isinstance(values, collections.Iterable):
         return (values, )
 
     # handle single string which is iterable but still is only one value

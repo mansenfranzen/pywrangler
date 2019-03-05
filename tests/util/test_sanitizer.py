@@ -39,3 +39,11 @@ def test_ensure_tuple_custom_class():
     test_output = (dummy, )
 
     assert ensure_tuple(test_input) == test_output
+
+
+def test_ensure_tuple_none():
+
+    test_input = None
+    test_output = None
+
+    assert ensure_tuple(test_input) == test_output
