@@ -70,39 +70,3 @@ def test_base_wrangler_set_params_exception(dummy_wrangler):
 
     with pytest.raises(ValueError):
         dummy_wrangler.set_params(not_exist=0)
-
-
-@pytest.fixture(scope="module")
-def interval_ident_kwargs():
-
-    return {"marker_column": "marker_col",
-            "marker_start": "start",
-            "marker_end": "end",
-            "order_columns": ("col1", "col2"),
-            "groupby_columns": ("col3", "col4"),
-            "sort_order": ("ascending", "descending")}
-
-
-def test_base_interval_identifier_init(interval_ident_kwargs):
-
-    bii = base.BaseIntervalIdentifier(**interval_ident_kwargs)
-
-    assert bii.get_params() == interval_ident_kwargs
-
-
-def test_base_interval_identifier_sort_length_exc(interval_ident_kwargs):
-
-    incorrect_length = interval_ident_kwargs.copy()
-    incorrect_length["sort_order"] = ("descending", )
-
-    with pytest.raises(ValueError):
-        base.BaseIntervalIdentifier(**incorrect_length)
-
-
-def test_base_interval_identifier_sort_keyword_exc(interval_ident_kwargs):
-
-    incorrect_keyword = interval_ident_kwargs.copy()
-    incorrect_keyword["sort_order"] = ("wrong keyword", "wrong keyword too")
-
-    with pytest.raises(ValueError):
-        base.BaseIntervalIdentifier(**incorrect_keyword)
