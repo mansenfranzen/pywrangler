@@ -37,23 +37,70 @@ def _unpack_marker(marker_mapping):
     return begin, close, noise
 
 
+def _return_dfs(input, output, columns=COLUMNS_STD, index=None):
+    """Helper function to return input and output dataframes.
+
+    """
+
+    df_in = pd.DataFrame(input, columns=columns, index=index)
+    df_out = pd.DataFrame(output, index=index)
+
+    return df_in, df_out
+
+
 @pytest.fixture(params=MARKER_TYPES.values(),
                 ids=MARKER_TYPES.keys())
-def empty_result(request):
+def no_interval(request):
     """Contains no identifiable interval.
 
     """
 
     begin, close, noise = _unpack_marker(request.param)
 
-    data = [[1, 1, noise],
-            [2, 1, close],
-            [3, 1, noise],
-            [4, 1, begin]]
+    input = [[1, 1, noise],
+             [2, 1, noise],
+             [3, 1, noise],
+             [4, 1, noise]]
 
-    result = [0, 0, 0, 0]
+    output = [0, 0, 0, 0]
 
-    df_in = pd.DataFrame(data, columns=COLUMNS_STD)
-    df_out = pd.DataFrame(result)
+    return _return_dfs(input, output)
 
-    return df_in, df_out
+
+@pytest.fixture(params=MARKER_TYPES.values(),
+                ids=MARKER_TYPES.keys())
+def single_interval(request):
+    """Most basic example containing a single interval.
+
+    """
+
+    begin, close, noise = _unpack_marker(request.param)
+
+    input = [[1, 1, noise],
+             [2, 1, begin],
+             [3, 1, close],
+             [4, 1, noise]]
+
+    output = [0, 1, 1, 0]
+
+    return _return_dfs(input, output)
+
+
+@pytest.fixture(params=MARKER_TYPES.values(),
+                ids=MARKER_TYPES.keys())
+def single_interval_spanning(request):
+    """Most basic example containing a single interval.
+
+    """
+
+    begin, close, noise = _unpack_marker(request.param)
+
+    input = [[1, 1, noise],
+             [2, 1, begin],
+             [3, 1, noise],
+             [4, 1, close],
+             [5, 1, noise]]
+
+    output = [0, 1, 1, 1, 0]
+
+    return _return_dfs(input, output)
