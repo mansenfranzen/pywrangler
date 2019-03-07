@@ -16,7 +16,7 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
 
     """
 
-    def _naive_iterator(self, series: pd.Series) -> List[int, ...]:
+    def _naive_iterator(self, series: pd.Series) -> List[int]:
         """Iterates given `series` value by value and extracts interval id.
         Assumes that series is already ordered and grouped.
 
