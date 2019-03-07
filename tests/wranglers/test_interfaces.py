@@ -15,7 +15,8 @@ def interval_ident_kwargs():
             "marker_end": "end",
             "order_columns": ("col1", "col2"),
             "groupby_columns": ("col3", "col4"),
-            "sort_order": ("ascending", "descending")}
+            "sort_order": ("ascending", "descending"),
+            "target_column_name": "abc"}
 
 
 def test_base_interval_identifier_init(interval_ident_kwargs):

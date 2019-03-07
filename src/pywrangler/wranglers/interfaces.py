@@ -50,6 +50,8 @@ class IntervalIdentifier(BaseWrangler):
     sort_order: str, Iterable[str], optional
         Explicitly define the sort order of given `order_columns` with
         `ascending` and `descending`.
+    target_column_name: str, optional
+        Name of the resulting target column.
 
     """
 
@@ -59,7 +61,8 @@ class IntervalIdentifier(BaseWrangler):
                  marker_end: Any,
                  order_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
-                 sort_order: TYPE_COLUMNS = None):
+                 sort_order: TYPE_COLUMNS = None,
+                 target_column_name: str = "iids"):
 
         self.marker_column = marker_column
         self.marker_start = marker_start
@@ -67,6 +70,7 @@ class IntervalIdentifier(BaseWrangler):
         self.order_columns = sanitizer.ensure_tuple(order_columns)
         self.groupby_columns = sanitizer.ensure_tuple(groupby_columns)
         self.sort_order = sanitizer.ensure_tuple(sort_order)
+        self.target_column_name = target_column_name
 
         # sanity checks for sort order
         if self.sort_order:
