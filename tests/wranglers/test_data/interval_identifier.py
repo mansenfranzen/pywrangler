@@ -3,104 +3,122 @@ wrangler.
 
 """
 
-import pytest
 
 import pandas as pd
 
+RANDOM_STATE = 3
 COLUMNS_STD = ("order", "groupby", "marker")
 
-MARKER_TYPES = {
 
-    "string": {"begin": "begin",
-               "close": "close",
-               "noise": "noise"},
-
-    "int": {"begin": 1,
-            "close": 2,
-            "noise": 3},
-
-    "float": {"begin": 1.1,
-              "close": 1.2,
-              "noise": 1.3}
-}
-
-
-def _unpack_marker(marker_mapping):
-    """Helper function to extract begin, close and noise marker.
-
-    """
-
-    begin = marker_mapping["begin"]
-    close = marker_mapping["close"]
-    noise = marker_mapping["noise"]
-
-    return begin, close, noise
-
-
-def _return_dfs(input, output, columns=COLUMNS_STD, index=None):
+def _return_dfs(data, target_column_name, parameter_column_names=COLUMNS_STD,
+                index=None, shuffle=False):
     """Helper function to return input and output dataframes.
 
     """
 
-    df_in = pd.DataFrame(input, columns=columns, index=index)
-    df_out = pd.DataFrame(output, index=index)
+    columns = parameter_column_names + (target_column_name, )
+    df_in = pd.DataFrame(data, columns=columns, index=index)
+
+    if shuffle:
+        df_in = df_in.sample(frac=1, replace=False, random_state=RANDOM_STATE)
+
+    df_out = df_in.pop(target_column_name).to_frame()
 
     return df_in, df_out
 
 
-@pytest.fixture(params=MARKER_TYPES.values(),
-                ids=MARKER_TYPES.keys())
-def no_interval(request):
-    """Contains no identifiable interval.
+def no_interval(begin, close, noise, target_column_name, shuffle):
 
-    """
+    data = [[1, 1, noise, 0],
+            [2, 1, noise, 0],
+            [3, 1, noise, 0],
+            [4, 1, noise, 0]]
 
-    begin, close, noise = _unpack_marker(request.param)
-
-    input = [[1, 1, noise],
-             [2, 1, noise],
-             [3, 1, noise],
-             [4, 1, noise]]
-
-    output = [0, 0, 0, 0]
-
-    return _return_dfs(input, output)
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
 
 
-@pytest.fixture(params=MARKER_TYPES.values(),
-                ids=MARKER_TYPES.keys())
-def single_interval(request):
-    """Most basic example containing a single interval.
+def single_interval(begin, close, noise, target_column_name, shuffle):
 
-    """
+    data = [[1, 1, noise, 0],
+            [2, 1, begin, 1],
+            [3, 1, close, 1],
+            [4, 1, noise, 0]]
 
-    begin, close, noise = _unpack_marker(request.param)
-
-    input = [[1, 1, noise],
-             [2, 1, begin],
-             [3, 1, close],
-             [4, 1, noise]]
-
-    output = [0, 1, 1, 0]
-
-    return _return_dfs(input, output)
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
 
 
-@pytest.fixture(params=MARKER_TYPES.values(),
-                ids=MARKER_TYPES.keys())
-def single_interval_spanning(request):
-    """Most basic example containing a single interval.
+def starts_with_single_interval(begin, close, noise, target_column_name,
+                                shuffle):
 
-    """
+    data = [[1, 1, begin, 1],
+            [2, 1, close, 1],
+            [3, 1, noise, 0],
+            [4, 1, noise, 0]]
 
-    begin, close, noise = _unpack_marker(request.param)
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
 
-    input = [[1, 1, noise],
-             [2, 1, begin],
-             [3, 1, noise],
-             [4, 1, close],
-             [5, 1, noise]]
 
-    output = [0, 1, 1, 1, 0]
+def ends_with_single_interval(begin, close, noise, target_column_name,
+                              shuffle):
 
-    return _return_dfs(input, output)
+    data = [[1, 1, noise, 0],
+            [2, 1, noise, 0],
+            [3, 1, begin, 1],
+            [4, 1, close, 1]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def single_interval_spanning(begin, close, noise, target_column_name,
+                             shuffle):
+
+    data = [[1, 1, noise, 0],
+            [2, 1, begin, 1],
+            [3, 1, noise, 1],
+            [4, 1, close, 1],
+            [5, 1, noise, 0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def multiple_intervals(begin, close, noise, target_column_name, shuffle):
+
+    data = [[1, 1, noise, 0],
+            [2, 1, begin, 1],
+            [3, 1, close, 1],
+            [4, 1, noise, 0],
+            [5, 1, begin, 2],
+            [6, 1, close, 2],
+            [7, 1, noise, 0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def multiple_intervals_spanning(begin, close, noise, target_column_name,
+                                shuffle):
+
+    data = [[1, 1, noise, 0],
+            [2, 1, begin, 1],
+            [3, 1, close, 1],
+            [4, 1, noise, 0],
+            [5, 1, begin, 2],
+            [6, 1, noise, 2],
+            [7, 1, close, 2],
+            [8, 1, noise, 0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def multiple_intervals_spanning_unsorted(begin, close, noise,
+                                         target_column_name, shuffle):
+
+    data = [[7, 1, close, 2],
+            [5, 1, begin, 2],
+            [2, 1, begin, 1],
+            [4, 1, noise, 0],
+            [6, 1, noise, 2],
+            [1, 1, noise, 0],
+            [3, 1, close, 1],
+            [8, 1, noise, 0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
