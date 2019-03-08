@@ -92,8 +92,8 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
                 intermediate.append(active)
 
         else:
-            # finally, add rest to result
-            result.extend(intermediate)
+            # finally, add rest to result which must be invalid
+            result.extend([0] * len(intermediate))
 
         return result
 
@@ -125,7 +125,8 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
 
         """
 
-        return df.sort_values(list(self.order_columns))\
+        return df.sort_values(list(self.order_columns),
+                              ascending=self.ascending)\
                  .groupby(list(self.groupby_columns))[self.marker_column]\
                  .transform(self._naive_iterator)\
                  .reindex(df.index)\
