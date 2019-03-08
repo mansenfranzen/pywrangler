@@ -8,6 +8,7 @@ import pandas as pd
 
 RANDOM_STATE = 3
 COLUMNS_STD = ("order", "groupby", "marker")
+COLUMNS_MUL = ("order1", "order2", "groupby1", "groupby2", "marker")
 
 
 def _return_dfs(data, target_column_name, parameter_column_names=COLUMNS_STD,
@@ -120,5 +121,64 @@ def multiple_intervals_spanning_unsorted(begin, close, noise,
             [1, 1, noise, 0],
             [3, 1, close, 1],
             [8, 1, noise, 0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def groupby_single_intervals(begin, close, noise, target_column_name, shuffle):
+
+    data = [[1, 1, noise, 0],
+            [2, 1, begin, 1],
+            [3, 1, close, 1],
+            [4, 1, noise, 0],
+
+            [5, 2, begin, 1],
+            [6, 2, noise, 1],
+            [7, 2, close, 1],
+            [8, 2, noise, 0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def groupby_multiple_intervals(begin, close, noise, target_column_name,
+                               shuffle):
+
+    data = [[1,  1, noise, 0],
+            [2,  1, begin, 1],
+            [3,  1, close, 1],
+            [4,  1, noise, 0],
+
+            [5,  2, begin, 1],
+            [6,  2, noise, 1],
+            [7,  2, close, 1],
+            [8,  2, noise, 0],
+            [9,  2, noise, 0],
+            [10, 2, begin, 2],
+            [11, 2, noise, 2],
+            [12, 2, close, 2],
+            [13, 2, begin, 3],
+            [14, 2, close, 3]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def groupby_multiple_more_intervals(begin, close, noise, target_column_name,
+                                    shuffle):
+    data = [[1, 1, noise, 0],
+            [2, 1, begin, 1],
+            [3, 1, close, 1],
+            [4, 1, noise, 0],
+
+            [5, 2, begin, 1],
+            [6, 2, noise, 1],
+            [7, 2, close, 1],
+            [8, 2, noise, 0],
+            [9, 2, noise, 0],
+
+            [10, 3, begin, 1],
+            [11, 3, noise, 1],
+            [12, 3, close, 1],
+            [13, 3, begin, 2],
+            [14, 3, close, 2]]
 
     return _return_dfs(data, target_column_name, shuffle=shuffle)

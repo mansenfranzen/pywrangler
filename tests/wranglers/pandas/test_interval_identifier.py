@@ -7,6 +7,9 @@ from pywrangler.wranglers.pandas.interval_identifier import NaiveIterator
 
 from ..test_data.interval_identifier import (
     ends_with_single_interval,
+    groupby_multiple_intervals,
+    groupby_multiple_more_intervals,
+    groupby_single_intervals,
     multiple_intervals,
     multiple_intervals_spanning,
     multiple_intervals_spanning_unsorted,
@@ -47,7 +50,8 @@ SHUFFLE_KWARGS = dict(argnames='shuffle',
 TEST_CASES = (no_interval, single_interval, single_interval_spanning,
               starts_with_single_interval, ends_with_single_interval,
               multiple_intervals, multiple_intervals_spanning,
-              multiple_intervals_spanning_unsorted)
+              multiple_intervals_spanning_unsorted, groupby_multiple_intervals,
+              groupby_single_intervals, groupby_multiple_more_intervals)
 TEST_IDS = [x.__name__ for x in TEST_CASES]
 TEST_KWARGS = dict(argnames='test_case',
                    argvalues=TEST_CASES,
