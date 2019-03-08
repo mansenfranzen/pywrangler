@@ -45,14 +45,15 @@ class IntervalIdentifier(BaseWrangler):
         A value defining the end of an interval.
     order_columns: str, Iterable[str], optional
         Column names which define the order of the data (e.g. a timestamp
-        column). Sort order can be defined with the parameter `sort_order`.
+        column). Sort order can be defined with the parameter `ascending`.
     groupby_columns: str, Iterable[str], optional
         Column names which define how the data should be grouped/split into
         separate entities. For distributed computation engines, groupby columns
         should ideally reference partition keys to avoid data shuffling.
-    sort_order: str, Iterable[str], optional
-        Explicitly define the sort order of given `order_columns` with
-        `ascending` and `descending`.
+    ascending: bool, Iterable[bool], optional
+        Sort ascending vs. descending. Specify list for multiple sort orders.
+        If a list is specified, length of the list must equal length of
+        `order_columns`. Default is True.
     target_column_name: str, optional
         Name of the resulting target column.
 
@@ -64,7 +65,7 @@ class IntervalIdentifier(BaseWrangler):
                  marker_end: Any,
                  order_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
-                 sort_order: TYPE_COLUMNS = None,
+                 ascending: Union[bool, Iterable[bool]] = None,
                  target_column_name: str = "iids"):
 
         self.marker_column = marker_column
@@ -72,22 +73,25 @@ class IntervalIdentifier(BaseWrangler):
         self.marker_end = marker_end
         self.order_columns = sanitizer.ensure_tuple(order_columns)
         self.groupby_columns = sanitizer.ensure_tuple(groupby_columns)
-        self.sort_order = sanitizer.ensure_tuple(sort_order)
+        self.ascending = sanitizer.ensure_tuple(ascending)
         self.target_column_name = target_column_name
 
         # sanity checks for sort order
-        if self.sort_order:
+        if self.ascending:
 
             # check for equal number of items of order and sort columns
-            if len(self.order_columns) != len(self.sort_order):
-                raise ValueError('`order_columns` and `sort_order` must have '
+            if len(self.order_columns) != len(self.ascending):
+                raise ValueError('`order_columns` and `ascending` must have '
                                  'equal number of items.')
 
             # check for correct sorting keywords
-            allow_values = ('ascending', 'descending')
-            if any([x not in allow_values for x in self.sort_order]):
-                raise ValueError('Only `ascending` and `descencing` are '
-                                 'allowed as keywords for `sort_order`')
+            if not all([isinstance(x, bool) for x in self.ascending]):
+                raise ValueError('Only `True` and `False` are '
+                                 'as arguments for `ascending`')
+
+        # set default sort order if None is given
+        elif self.order_columns:
+            self.ascending = [True] * len(self.order_columns)
 
     @property
     def preserves_sample_size(self) -> bool:
