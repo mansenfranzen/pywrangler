@@ -6,13 +6,17 @@ import pandas as pd
 from pywrangler.wranglers.pandas.interval_identifier import NaiveIterator
 
 from ..test_data.interval_identifier import (
+    begin_marker_left_open,
+    close_marker_starts,
     ends_with_single_interval,
     groupby_multiple_intervals,
+    groupby_multiple_intervals_reverse,
     groupby_multiple_more_intervals,
     groupby_single_intervals,
     invalid_end,
     invalid_start,
     multiple_groupby_order_columns,
+    multiple_groupby_order_columns_reverse,
     multiple_groupby_order_columns_with_invalids,
     multiple_intervals,
     multiple_intervals_spanning,
@@ -57,18 +61,21 @@ TEST_CASES = (no_interval, single_interval, single_interval_spanning,
               multiple_intervals_spanning_unsorted, groupby_multiple_intervals,
               groupby_single_intervals, groupby_multiple_more_intervals,
               multiple_groupby_order_columns, invalid_end, invalid_start,
-              multiple_groupby_order_columns_with_invalids)
+              multiple_groupby_order_columns_with_invalids,
+              groupby_multiple_intervals_reverse,
+              multiple_groupby_order_columns_reverse, begin_marker_left_open,
+              close_marker_starts)
 TEST_IDS = [x.__name__ for x in TEST_CASES]
 TEST_KWARGS = dict(argnames='test_case',
                    argvalues=TEST_CASES,
                    ids=TEST_IDS)
 
 
+@pytest.mark.parametrize(**SHUFFLE_KWARGS)
+@pytest.mark.parametrize(**MARKERS_KWARGS)
 @pytest.mark.parametrize(**TEST_KWARGS)
 @pytest.mark.parametrize(**WRANGLER_KWARGS)
-@pytest.mark.parametrize(**MARKERS_KWARGS)
-@pytest.mark.parametrize(**SHUFFLE_KWARGS)
-def test_interval_identifier(test_case, algorithm, marker, shuffle):
+def test_pandas_interval_identifier(test_case, algorithm, marker, shuffle):
     """Tests against all available algorithms and test cases.
 
     Parameters
@@ -92,14 +99,24 @@ def test_interval_identifier(test_case, algorithm, marker, shuffle):
                                      target_column_name="iids",
                                      shuffle=shuffle)
 
+    # determine sort order, if test_case ends with 'reverse', than switch
+    if test_case.__name__.endswith("reverse"):
+        sort_order = [False]
+    else:
+        sort_order = [True]
+
     # determine correct order and groupby columns dependant on test data shape
     n_cols = test_input.shape[1]
     if n_cols == 3:
         kwargs = {"order_columns": "order",
-                  "groupby_columns": "groupby"}
+                  "groupby_columns": "groupby",
+                  "ascending": sort_order}
+
     elif n_cols == 5:
         kwargs = {"order_columns": ("order1" ,"order2"),
-                  "groupby_columns": ("groupby1", "groupby2")}
+                  "groupby_columns": ("groupby1", "groupby2"),
+                  "ascending": sort_order*2}
+
     else:
         raise ValueError("Incorrect number of columns for test data. "
                          "See module test_data/interval_identifier.py")

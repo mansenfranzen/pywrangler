@@ -48,6 +48,28 @@ def no_interval(begin, close, noise, target_column_name, shuffle):
     return _return_dfs(data, target_column_name, shuffle=shuffle)
 
 
+def begin_marker_left_open(begin, close, noise, target_column_name, shuffle):
+
+    # cols:  order, groupby, marker, iid"""
+    data = [[1,     1,       noise,  0],
+            [2,     1,       noise,  0],
+            [3,     1,       begin,  0],
+            [4,     1,       noise,  0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def close_marker_starts(begin, close, noise, target_column_name, shuffle):
+
+    # cols:  order, groupby, marker, iid"""
+    data = [[1,     1,       close,  0],
+            [2,     1,       noise,  0],
+            [3,     1,       begin,  1],
+            [4,     1,       close,  1]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
 def invalid_start(begin, close, noise, target_column_name, shuffle):
 
     # cols:  order, groupby, marker, iid"""
@@ -209,6 +231,29 @@ def groupby_multiple_intervals(begin, close, noise, target_column_name,
     return _return_dfs(data, target_column_name, shuffle=shuffle)
 
 
+def groupby_multiple_intervals_reverse(begin, close, noise, target_column_name,
+                                       shuffle):
+
+    # cols:  order, groupby, marker, iid"""
+    data = [[1,     1,       noise,  0],
+            [2,     1,       begin,  0],
+            [3,     1,       close,  0],
+            [4,     1,       noise,  0],
+
+            [5,     2,       begin,  0],
+            [6,     2,       noise,  0],
+            [7,     2,       close,  2],
+            [8,     2,       noise,  2],
+            [9,     2,       noise,  2],
+            [10,    2,       begin,  2],
+            [11,    2,       noise,  0],
+            [12,    2,       close,  1],
+            [13,    2,       begin,  1],
+            [14,    2,       close,  0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
 def groupby_multiple_more_intervals(begin, close, noise, target_column_name,
                                     shuffle):
 
@@ -254,6 +299,32 @@ def multiple_groupby_order_columns(begin, close, noise, target_column_name,
             [3,      1,      2,        2,        begin,  1],
             [3,      2,      2,        2,        noise,  1],
             [4,      1,      2,        2,        close,  1],
+            [4,      2,      2,        2,        noise,  0]]
+
+    return _return_dfs(data, target_column_name, shuffle=shuffle)
+
+
+def multiple_groupby_order_columns_reverse(begin, close, noise,
+                                           target_column_name, shuffle):
+    # cols:  order1, order2, groupby1, groupby2, marker, iid"""
+    data = [[1,      1,      1,        1,        close,  2],
+            [1,      2,      1,        1,        begin,  2],
+            [2,      1,      1,        1,        close,  1],
+            [2,      2,      1,        1,        begin,  1],
+
+            [3,      1,      1,        2,        begin,  0],
+            [3,      2,      1,        2,        close,  1],
+            [4,      1,      1,        2,        noise,  1],
+            [4,      2,      1,        2,        begin,  1],
+
+            [1,      1,      2,        1,        begin,  0],
+            [1,      2,      2,        1,        close,  1],
+            [2,      1,      2,        1,        begin,  1],
+            [2,      2,      2,        1,        close,  0],
+
+            [3,      1,      2,        2,        begin,  0],
+            [3,      2,      2,        2,        noise,  0],
+            [4,      1,      2,        2,        close,  0],
             [4,      2,      2,        2,        noise,  0]]
 
     return _return_dfs(data, target_column_name, shuffle=shuffle)
