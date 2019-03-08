@@ -28,8 +28,10 @@ class IntervalIdentifier(BaseWrangler):
     by definition.
 
     Only the shortest valid interval is identified. Given multiple opening
-    markers, only the last is relevant and the rest is ignored. Given multiple
-    closing markers, only the first is relevant and the rest is ignored.
+    markers in sequence without an intermittent closing marker, only the last
+    opening marker is relevant and the rest is ignored. Given multiple
+    closing markers in sequence without an intermittent opening marker, only
+    the first closing marker is relevant and the rest is ignored.
 
     Opening and closing markers are included in their corresponding interval.
 
@@ -46,7 +48,8 @@ class IntervalIdentifier(BaseWrangler):
         column). Sort order can be defined with the parameter `sort_order`.
     groupby_columns: str, Iterable[str], optional
         Column names which define how the data should be grouped/split into
-        separate entities.
+        separate entities. For distributed computation engines, groupby columns
+        should ideally reference partition keys to avoid data shuffling.
     sort_order: str, Iterable[str], optional
         Explicitly define the sort order of given `order_columns` with
         `ascending` and `descending`.
