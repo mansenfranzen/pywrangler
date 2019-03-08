@@ -34,17 +34,16 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
             return value == self.marker_end
 
         def is_valid_begin(value, active):
-            """A valid begin is defined with `value` begin equal to the begin
-            marker and `active` being 0 which means no active interval.
+            """A valid begin occurs if there is no active interval present (no
+            start marker was seen since last end marker).
 
             """
 
             return is_begin(value) and not active
 
         def is_invalid_begin(value, active):
-            """An invalid begin is defined with `value` begin equal to the
-            begin marker and `active` being unequal to 0 which means there is
-            an active interval.
+            """An invalid begin occurs if there is already an active interval
+            present (start marker was seen since last end marker).
 
             """
 
