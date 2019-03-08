@@ -11,8 +11,13 @@ from pywrangler.wranglers.pandas.base import PandasWrangler
 
 
 class NaiveIterator(IntervalIdentifier, PandasWrangler):
-    """Most simple, sequential implementation which iterates over all values
-    while remembering the state of start and end markers.
+    """Most simple, sequential implementation which iterates over values while
+    remembering the state of start and end markers.
+
+    The `_native_iterator` method extracts intervals using plain python
+    assuming values to be already ordered and grouped correctly. Ordering and
+    grouping while retaining the original index is left to pandas within the
+    `transform` method.
 
     """
 
