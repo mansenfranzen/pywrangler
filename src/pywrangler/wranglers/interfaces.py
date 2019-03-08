@@ -90,5 +90,5 @@ class IntervalIdentifier(BaseWrangler):
                                  'allowed as keywords for `sort_order`')
 
     @property
-    def preserves_sample_size(self):
+    def preserves_sample_size(self) -> bool:
         return True

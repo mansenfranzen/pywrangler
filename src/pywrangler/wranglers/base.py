@@ -43,14 +43,14 @@ class BaseWrangler:
     """
 
     @property
-    def preserves_sample_size(self):
+    def preserves_sample_size(self) -> bool:
         raise NotImplementedError
 
     @property
-    def computation_engine(self):
+    def computation_engine(self) -> str:
         raise NotImplementedError
 
-    def get_params(self):
+    def get_params(self) -> dict:
         """Retrieve all wrangler parameters set within the __init__ method.
 
         Returns
@@ -93,6 +93,8 @@ class BaseWrangler:
                                  .format(key, self))
 
             setattr(self, key, value)
+
+        return self
 
     def fit(self):
         raise NotImplementedError
