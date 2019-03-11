@@ -3,7 +3,10 @@ import pytest
 
 import pandas as pd
 
-from pywrangler.wranglers.pandas.interval_identifier import NaiveIterator
+from pywrangler.wranglers.pandas.interval_identifier import (
+    NaiveIterator,
+    VectorizedCumSum
+)
 
 from ..test_data.interval_identifier import (
     begin_marker_left_open,
@@ -45,7 +48,7 @@ MARKERS_KWARGS = dict(argnames='marker',
                       argvalues=MARKERS,
                       ids=MARKERS_IDS)
 
-WRANGLER = (NaiveIterator,)
+WRANGLER = (NaiveIterator, VectorizedCumSum)
 WRANGLER_IDS = [x.__name__ for x in WRANGLER]
 WRANGLER_KWARGS = dict(argnames='algorithm',
                        argvalues=WRANGLER,

@@ -147,3 +147,89 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
 
         """
         return self.fit(df).transform(df)
+
+
+class VectorizedCumSum(IntervalIdentifier, PandasWrangler):
+    """More sophisticated approach using multiple, vectorized operations. The
+    key ingredient is the cumulative sum to get enumeration of valid/invalid
+    intervals.
+
+    """
+
+    def _vectorized_cumsum(self, series: pd.Series) -> List[int]:
+        """TODO: Add algo description
+
+        Assumes that series is already ordered and grouped.
+
+        """
+
+        # get boolean series with start and end markers
+        bool_begin = series.eq(self.marker_start)
+        bool_close = series.eq(self.marker_end)
+
+        # shifting the close marker allows cumulative sum to include the end
+        bool_close_shift = bool_close.shift().fillna(False)
+
+        # get increasing ids for intervals (in/valid) with cumsum
+        ser_ids = (bool_begin + bool_close_shift).cumsum()
+
+        # separate valid vs invalid: ids with begin AND close marker are valid
+        bool_valid_ids = (bool_begin + bool_close).groupby(ser_ids).sum().eq(2)
+
+        valid_ids = bool_valid_ids.index[bool_valid_ids].values
+        bool_valid = ser_ids.isin(valid_ids)
+
+        # re-numerate ids from 1 to x and fill invalid with 0
+        result = ser_ids[bool_valid].diff().ne(0).cumsum()
+        return result.reindex(series.index).fillna(0).values
+
+    def fit(self, df: pd.DataFrame):
+        """Do nothing and return the wrangler unchanged.
+
+        This method is just there to implement the usual API and hence work in
+        pipelines.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+
+        """
+
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Extract interval ids from given dataframe.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+
+        Returns
+        -------
+        result: pd.DataFrame
+            Single columned dataframe with same index as `df`.
+
+        """
+
+        return df.sort_values(list(self.order_columns),
+                              ascending=self.ascending)\
+                 .groupby(list(self.groupby_columns))[self.marker_column]\
+                 .transform(self._vectorized_cumsum)\
+                 .reindex(df.index)\
+                 .to_frame(self.target_column_name)\
+                 .astype(int)
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply fit and transform in sequence at once.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+
+        Returns
+        -------
+        result: pd.DataFrame
+            Single columned dataframe with same index as `df`.
+
+        """
+        return self.fit(df).transform(df)
