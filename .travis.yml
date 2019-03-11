@@ -9,27 +9,27 @@ python:
 
 env:
   - ENV_STRING=pandas0.24.1
-#  - ENV_STRING=pandas0.24.0
-#
-#  - ENV_STRING=pandas0.23.4
-#  - ENV_STRING=pandas0.23.3
-#  - ENV_STRING=pandas0.23.2
-#  - ENV_STRING=pandas0.23.1
-#  - ENV_STRING=pandas0.23.0
-#
-#  - ENV_STRING=pandas0.22.0
-#
-#  - ENV_STRING=pandas0.21.1
-#  - ENV_STRING=pandas0.21.0
-#
-#  - ENV_STRING=pandas0.20.3
-#  - ENV_STRING=pandas0.20.2
-#  - ENV_STRING=pandas0.20.1
-#  - ENV_STRING=pandas0.20.0
-#
-#  - ENV_STRING=pandas0.19.2
-#  - ENV_STRING=pandas0.19.1
-#  - ENV_STRING=pandas0.19.0
+  - ENV_STRING=pandas0.24.0
+
+  - ENV_STRING=pandas0.23.4
+  - ENV_STRING=pandas0.23.3
+  - ENV_STRING=pandas0.23.2
+  - ENV_STRING=pandas0.23.1
+  - ENV_STRING=pandas0.23.0
+
+  - ENV_STRING=pandas0.22.0
+
+  - ENV_STRING=pandas0.21.1
+  - ENV_STRING=pandas0.21.0
+
+  - ENV_STRING=pandas0.20.3
+  - ENV_STRING=pandas0.20.2
+  - ENV_STRING=pandas0.20.1
+  - ENV_STRING=pandas0.20.0
+
+  - ENV_STRING=pandas0.19.2
+  - ENV_STRING=pandas0.19.1
+  - ENV_STRING=pandas0.19.0
 #
   - ENV_STRING=pyspark2.4.0
 #  - ENV_STRING=pyspark2.3.1
