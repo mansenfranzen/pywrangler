@@ -1,8 +1,6 @@
 
 import pytest
 
-import pandas as pd
-
 from pywrangler.wranglers.pandas.interval_identifier import (
     NaiveIterator,
     VectorizedCumSum
@@ -29,6 +27,14 @@ from ..test_data.interval_identifier import (
     single_interval_spanning,
     starts_with_single_interval
 )
+
+# ensure backwards compatibility beyond pandas 0.20.0
+try:
+    from pandas.testing import assert_frame_equal
+except ImportError:
+    from pandas.util.testing import assert_frame_equal
+
+
 
 MARKER_TYPES = {"string": {"begin": "begin",
                            "close": "close",
@@ -131,4 +137,4 @@ def test_pandas_interval_identifier(test_case, algorithm, marker, shuffle):
                          **kwargs)
 
     test_output = wrangler.fit_transform(test_input)
-    pd.testing.assert_frame_equal(test_output, expected)
+    assert_frame_equal(test_output, expected)
