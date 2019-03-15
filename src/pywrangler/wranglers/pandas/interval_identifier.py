@@ -11,18 +11,16 @@ from pywrangler.wranglers.pandas.base import PandasWrangler
 
 
 class NaiveIterator(IntervalIdentifier, PandasWrangler):
-    """Most simple, sequential implementation which iterates over values while
+    """Most simple, sequential implementation which iterates values while
     remembering the state of start and end markers.
-
-    The `_native_iterator` method extracts intervals using plain python
-    assuming values to be already ordered and grouped correctly. Ordering and
-    grouping while retaining the original index is left to pandas within the
-    `transform` method.
 
     """
 
     def _naive_iterator(self, series: pd.Series) -> List[int]:
-        """Iterates given `series` value by value and extracts interval id.
+        """Iterates given `series` testing each value against start and end
+        markers while keeping track of already instantiated intervals to
+        separate valid from invalid intervals.
+
         Assumes that series is already ordered and grouped.
 
         """
@@ -32,51 +30,51 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
         intermediate = []  # stores intermediate results
         result = []  # keeps track of all results
 
-        def is_begin(value):
+        def is_start(value):
             return value == self.marker_start
 
-        def is_close(value):
+        def is_end(value):
             return value == self.marker_end
 
-        def is_valid_begin(value, active):
-            """A valid begin occurs if there is no active interval present (no
+        def is_valid_start(value, active):
+            """A valid start occurs if there is no active interval present (no
             start marker was seen since last end marker).
 
             """
 
-            return is_begin(value) and not active
+            return is_start(value) and not active
 
-        def is_invalid_begin(value, active):
-            """An invalid begin occurs if there is already an active interval
+        def is_invalid_start(value, active):
+            """An invalid start occurs if there is already an active interval
             present (start marker was seen since last end marker).
 
             """
 
-            return is_begin(value) and active
+            return is_start(value) and active
 
-        def is_valid_close(value, active):
-            """A valid close is defined with `value` begin equal to the close
+        def is_valid_end(value, active):
+            """A valid end is defined with `value` begin equal to the close
             marker and `active` being unqual to 0 which means there is an
             active interval.
 
             """
 
-            return is_close(value) and active
+            return is_end(value) and active
 
         for value in series.values:
 
-            if is_invalid_begin(value, active):
+            if is_invalid_start(value, active):
                 # add invalid values to result (from previous begin marker)
                 result.extend([0] * len(intermediate))
 
                 # start new intermediate list
                 intermediate = [active]
 
-            elif is_valid_begin(value, active):
+            elif is_valid_start(value, active):
                 active = counter + 1
                 intermediate.append(active)
 
-            elif is_valid_close(value, active):
+            elif is_valid_end(value, active):
                 # add valid interval to result
                 result.extend(intermediate)
                 result.append(active)
@@ -150,31 +148,40 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
 
 
 class VectorizedCumSum(IntervalIdentifier, PandasWrangler):
-    """More sophisticated approach using multiple, vectorized operations. The
-    key ingredient is the cumulative sum to get enumeration of valid/invalid
-    intervals.
+    """Sophisticated approach using multiple, vectorized operations. Using
+    cumulative sum allows enumeration of intervals to avoid looping.
 
     """
 
     def _vectorized_cumsum(self, series: pd.Series) -> List[int]:
-        """TODO: Add algo description
+        """First, get enumeration of all intervals (valid and invalid). Every
+        time a start or end marker is encountered, increase interval id by one.
+        However, shift the end marker by one to include the end marker in the
+        current interval. This is realized via the cumulative sum of boolean
+        series of start markers and shifted end markers.
+
+        Second, separate valid from invalid intervals by ensuring the presence
+        of both start and end markers per interval id.
+
+        Third, numerate valid intervals starting with 1 and set invalid
+        intervals to 0.
 
         Assumes that series is already ordered and grouped.
 
         """
 
         # get boolean series with start and end markers
-        bool_begin = series.eq(self.marker_start)
-        bool_close = series.eq(self.marker_end)
+        bool_start = series.eq(self.marker_start)
+        bool_end = series.eq(self.marker_end)
 
         # shifting the close marker allows cumulative sum to include the end
-        bool_close_shift = bool_close.shift().fillna(False)
+        bool_end_shift = bool_end.shift().fillna(False)
 
         # get increasing ids for intervals (in/valid) with cumsum
-        ser_ids = (bool_begin + bool_close_shift).cumsum()
+        ser_ids = (bool_start + bool_end_shift).cumsum()
 
-        # separate valid vs invalid: ids with begin AND close marker are valid
-        bool_valid_ids = (bool_begin + bool_close).groupby(ser_ids).sum().eq(2)
+        # separate valid vs invalid: ids with start AND end marker are valid
+        bool_valid_ids = (bool_start + bool_end).groupby(ser_ids).sum().eq(2)
 
         valid_ids = bool_valid_ids.index[bool_valid_ids].values
         bool_valid = ser_ids.isin(valid_ids)

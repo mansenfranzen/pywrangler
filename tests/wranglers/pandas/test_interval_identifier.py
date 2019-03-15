@@ -7,8 +7,7 @@ from pywrangler.wranglers.pandas.interval_identifier import (
 )
 
 from ..test_data.interval_identifier import (
-    begin_marker_left_open,
-    close_marker_starts,
+    end_marker_begins,
     ends_with_single_interval,
     groupby_multiple_intervals,
     groupby_multiple_intervals_reverse,
@@ -25,6 +24,7 @@ from ..test_data.interval_identifier import (
     no_interval,
     single_interval,
     single_interval_spanning,
+    start_marker_left_open,
     starts_with_single_interval
 )
 
@@ -36,16 +36,16 @@ except ImportError:
 
 
 
-MARKER_TYPES = {"string": {"begin": "begin",
-                           "close": "close",
+MARKER_TYPES = {"string": {"start": "start",
+                           "end": "end",
                            "noise": "noise"},
 
-                "int": {"begin": 1,
-                        "close": 2,
+                "int": {"start": 1,
+                        "end": 2,
                         "noise": 3},
 
-                "float": {"begin": 1.1,
-                          "close": 1.2,
+                "float": {"start": 1.1,
+                          "end": 1.2,
                           "noise": 1.3}}
 
 MARKERS = MARKER_TYPES.values()
@@ -72,8 +72,8 @@ TEST_CASES = (no_interval, single_interval, single_interval_spanning,
               multiple_groupby_order_columns, invalid_end, invalid_start,
               multiple_groupby_order_columns_with_invalids,
               groupby_multiple_intervals_reverse,
-              multiple_groupby_order_columns_reverse, begin_marker_left_open,
-              close_marker_starts)
+              multiple_groupby_order_columns_reverse, start_marker_left_open,
+              end_marker_begins)
 TEST_IDS = [x.__name__ for x in TEST_CASES]
 TEST_KWARGS = dict(argnames='test_case',
                    argvalues=TEST_CASES,
@@ -102,8 +102,8 @@ def test_pandas_interval_identifier(test_case, algorithm, marker, shuffle):
     """
 
     # generate test_input and expected result
-    test_input, expected = test_case(begin=marker["begin"],
-                                     close=marker["close"],
+    test_input, expected = test_case(start=marker["start"],
+                                     end=marker["end"],
                                      noise=marker["noise"],
                                      target_column_name="iids",
                                      shuffle=shuffle)
@@ -132,8 +132,8 @@ def test_pandas_interval_identifier(test_case, algorithm, marker, shuffle):
 
     # instantiate actual wrangler
     wrangler = algorithm(marker_column="marker",
-                         marker_start=marker["begin"],
-                         marker_end=marker["close"],
+                         marker_start=marker["start"],
+                         marker_end=marker["end"],
                          **kwargs)
 
     test_output = wrangler.fit_transform(test_input)
