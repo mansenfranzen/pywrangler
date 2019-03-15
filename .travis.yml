@@ -39,6 +39,8 @@ env:
 matrix:
   exclude:
     - python: '3.7'
+      env: ENV_STRING=pandas0.22.0
+    - python: '3.7'
       env: ENV_STRING=pandas0.21.1
     - python: '3.7'
       env: ENV_STRING=pandas0.21.0
