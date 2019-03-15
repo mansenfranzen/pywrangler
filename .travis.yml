@@ -8,16 +8,16 @@ python:
   - '3.7'
 
 env:
-  - ENV_STRING=pandas0.24.1
-  - ENV_STRING=pandas0.24.0
-
-  - ENV_STRING=pandas0.23.4
-  - ENV_STRING=pandas0.23.3
-  - ENV_STRING=pandas0.23.2
-  - ENV_STRING=pandas0.23.1
-  - ENV_STRING=pandas0.23.0
-
-  - ENV_STRING=pandas0.22.0
+#  - ENV_STRING=pandas0.24.1
+#  - ENV_STRING=pandas0.24.0
+#
+#  - ENV_STRING=pandas0.23.4
+#  - ENV_STRING=pandas0.23.3
+#  - ENV_STRING=pandas0.23.2
+#  - ENV_STRING=pandas0.23.1
+#  - ENV_STRING=pandas0.23.0
+#
+#  - ENV_STRING=pandas0.22.0
 
   - ENV_STRING=pandas0.21.1
   - ENV_STRING=pandas0.21.0
@@ -34,6 +34,15 @@ env:
   - ENV_STRING=pyspark2.4.0
 #  - ENV_STRING=pyspark2.3.1
 
+
+matrix:
+  exclude:
+    - python: '3.7'
+      env: ENV_STRING=pandas0.21.1
+    - python: '3.7'
+      env: ENV_STRING=pandas0.21.0
+    - python: '3.7'
+      env: ENV_STRING=pandas0.20.3
 
 dist: xenial
 
