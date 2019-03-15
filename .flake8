@@ -1,3 +1,1 @@
 [flake8]
-exclude=
-    tests/wranglers/pandas/test_*
