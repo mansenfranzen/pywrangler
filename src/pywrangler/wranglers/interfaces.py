@@ -3,12 +3,10 @@ and corresponding descriptions.
 
 """
 
-from typing import Any, Iterable, Union
 
 from pywrangler.util import sanitizer
+from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
 from pywrangler.wranglers.base import BaseWrangler
-
-TYPE_COLUMNS = Union[str, Iterable[str]]
 
 
 class IntervalIdentifier(BaseWrangler):
@@ -61,11 +59,11 @@ class IntervalIdentifier(BaseWrangler):
 
     def __init__(self,
                  marker_column: str,
-                 marker_start: Any,
-                 marker_end: Any,
+                 marker_start,
+                 marker_end,
                  order_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
-                 ascending: Union[bool, Iterable[bool]] = None,
+                 ascending: TYPE_ASCENDING = None,
                  target_column_name: str = "iids"):
 
         self.marker_column = marker_column
@@ -91,7 +89,7 @@ class IntervalIdentifier(BaseWrangler):
 
         # set default sort order if None is given
         elif self.order_columns:
-            self.ascending = [True] * len(self.order_columns)
+            self.ascending = (True, ) * len(self.order_columns)
 
     @property
     def preserves_sample_size(self) -> bool:
