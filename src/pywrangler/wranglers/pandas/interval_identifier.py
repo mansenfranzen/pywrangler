@@ -7,16 +7,77 @@ from typing import List
 import pandas as pd
 
 from pywrangler.wranglers.interfaces import IntervalIdentifier
-from pywrangler.wranglers.pandas.base import PandasWrangler
+from pywrangler.wranglers.pandas.base import PandasSingleNoFit
 
 
-class NaiveIterator(IntervalIdentifier, PandasWrangler):
+class BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
+    """Provides `transform` and `validate_input` methods  common to more than
+    one implementation of the pandas interval identification wrangler.
+
+    The `transform` has several shared responsibilities. It sorts and groups
+    the data before applying the `_transform` method which needs to be
+    implemented by every wrangler subclassing this mixin. In addition, it
+    remains the original index of the input dataframe, ensures the resulting
+    column to be of type integer and converts output to a data frame with
+    parametrized target column name.
+
+    """
+
+    def validate_input(self,  df: pd.DataFrame):
+        """Checks input data frame in regard to column names and empty data.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+            Dataframe to be validated.
+
+        """
+
+        self.validate_columns(df, self.marker_column)
+        self.validate_columns(df, self.order_columns)
+        self.validate_columns(df, self.groupby_columns)
+        self.validate_empty_df(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Extract interval ids from given dataframe.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+
+        Returns
+        -------
+        result: pd.DataFrame
+            Single columned dataframe with same index as `df`.
+
+        """
+
+        # check input
+        self.validate_input(df)
+
+        # transform
+        df_ordered = self.sort_values(df, self.order_columns, self.ascending)
+        df_grouped = self.groupby(df_ordered, self.groupby_columns)
+
+        df_result = df_grouped[self.marker_column]\
+            .transform(self._transform)\
+            .astype(int)\
+            .reindex(df.index)\
+            .to_frame(self.target_column_name)
+
+        # check output
+        self.validate_output_shape(df, df_result)
+
+        return df_result
+
+
+class NaiveIterator(BaseIntervalIdentifier):
     """Most simple, sequential implementation which iterates values while
     remembering the state of start and end markers.
 
     """
 
-    def _naive_iterator(self, series: pd.Series) -> List[int]:
+    def _transform(self, series: pd.Series) -> List[int]:
         """Iterates given `series` testing each value against start and end
         markers while keeping track of already instantiated intervals to
         separate valid from invalid intervals.
@@ -95,65 +156,14 @@ class NaiveIterator(IntervalIdentifier, PandasWrangler):
 
         return result
 
-    def fit(self, df: pd.DataFrame):
-        """Do nothing and return the wrangler unchanged.
 
-        This method is just there to implement the usual API and hence work in
-        pipelines.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-
-        """
-
-        return self
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Extract interval ids from given dataframe.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-
-        Returns
-        -------
-        result: pd.DataFrame
-            Single columned dataframe with same index as `df`.
-
-        """
-
-        return df.sort_values(list(self.order_columns),
-                              ascending=self.ascending)\
-                 .groupby(list(self.groupby_columns))[self.marker_column]\
-                 .transform(self._naive_iterator)\
-                 .reindex(df.index)\
-                 .to_frame(self.target_column_name)\
-                 .astype(int)
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply fit and transform in sequence at once.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-
-        Returns
-        -------
-        result: pd.DataFrame
-            Single columned dataframe with same index as `df`.
-
-        """
-        return self.fit(df).transform(df)
-
-
-class VectorizedCumSum(IntervalIdentifier, PandasWrangler):
+class VectorizedCumSum(BaseIntervalIdentifier):
     """Sophisticated approach using multiple, vectorized operations. Using
     cumulative sum allows enumeration of intervals to avoid looping.
 
     """
 
-    def _vectorized_cumsum(self, series: pd.Series) -> List[int]:
+    def _transform(self, series: pd.Series) -> List[int]:
         """First, get enumeration of all intervals (valid and invalid). Every
         time a start or end marker is encountered, increase interval id by one.
         However, shift the end marker by one to include the end marker in the
@@ -189,54 +199,3 @@ class VectorizedCumSum(IntervalIdentifier, PandasWrangler):
         # re-numerate ids from 1 to x and fill invalid with 0
         result = ser_ids[bool_valid].diff().ne(0).cumsum()
         return result.reindex(series.index).fillna(0).values
-
-    def fit(self, df: pd.DataFrame):
-        """Do nothing and return the wrangler unchanged.
-
-        This method is just there to implement the usual API and hence work in
-        pipelines.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-
-        """
-
-        return self
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Extract interval ids from given dataframe.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-
-        Returns
-        -------
-        result: pd.DataFrame
-            Single columned dataframe with same index as `df`.
-
-        """
-
-        return df.sort_values(list(self.order_columns),
-                              ascending=self.ascending)\
-                 .groupby(list(self.groupby_columns))[self.marker_column]\
-                 .transform(self._vectorized_cumsum)\
-                 .reindex(df.index)\
-                 .to_frame(self.target_column_name)\
-                 .astype(int)
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply fit and transform in sequence at once.
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-
-        Returns
-        -------
-        result: pd.DataFrame
-            Single columned dataframe with same index as `df`.
-
-        """
-        return self.fit(df).transform(df)
