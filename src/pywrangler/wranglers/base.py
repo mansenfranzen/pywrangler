@@ -17,11 +17,12 @@ class BaseWrangler:
     method. Furthermore, `get_params` and `set_params` methods are required for
     grid search and pipeline compatibility.
 
-    The `fit` method should contain any logic behind parameter validation (e.g.
-    type, shape and other sanity checks) and optional fitting (e.g. compute
-    mean and variance for scaling). The `transform` method includes the actual
-    computational transformation. The `fit_transform` simply applies the former
-    methods in sequence.
+    The `fit` method contains optional fitting (e.g. compute mean and variance
+    for scaling) which sets training data dependent transformation behaviour.
+    The `transform` method includes the actual computational transformation.
+    The `fit_transform` either applies the former methods in sequence or adds a
+    new implementation of both with better performance. The `__init__` method
+    should contain any logic behind parameter parsing and conversion.
 
     In contrast to sklearn, wranglers do only accept dataframes like objects
     (like pandas, spark or dask dataframes) as inputs to `fit` and `transform`.
@@ -42,14 +43,14 @@ class BaseWrangler:
     """
 
     @property
-    def preserves_sample_size(self):
+    def preserves_sample_size(self) -> bool:
         raise NotImplementedError
 
     @property
-    def computation_engine(self):
+    def computation_engine(self) -> str:
         raise NotImplementedError
 
-    def get_params(self):
+    def get_params(self) -> dict:
         """Retrieve all wrangler parameters set within the __init__ method.
 
         Returns
@@ -92,6 +93,8 @@ class BaseWrangler:
                                  .format(key, self))
 
             setattr(self, key, value)
+
+        return self
 
     def fit(self):
         raise NotImplementedError
