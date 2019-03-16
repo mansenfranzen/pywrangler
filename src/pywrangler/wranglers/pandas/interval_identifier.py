@@ -10,7 +10,7 @@ from pywrangler.wranglers.interfaces import IntervalIdentifier
 from pywrangler.wranglers.pandas.base import PandasSingleNoFit
 
 
-class BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
+class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
     """Provides `transform` and `validate_input` methods  common to more than
     one implementation of the pandas interval identification wrangler.
 
@@ -70,8 +70,15 @@ class BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
 
         return df_result
 
+    def _transform(self, series: pd.Series) -> List[int]:
+        """Needs to be implemented.
 
-class NaiveIterator(BaseIntervalIdentifier):
+        """
+
+        raise NotImplementedError
+
+
+class NaiveIterator(_BaseIntervalIdentifier):
     """Most simple, sequential implementation which iterates values while
     remembering the state of start and end markers.
 
@@ -157,7 +164,7 @@ class NaiveIterator(BaseIntervalIdentifier):
         return result
 
 
-class VectorizedCumSum(BaseIntervalIdentifier):
+class VectorizedCumSum(_BaseIntervalIdentifier):
     """Sophisticated approach using multiple, vectorized operations. Using
     cumulative sum allows enumeration of intervals to avoid looping.
 
