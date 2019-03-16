@@ -2,10 +2,11 @@
 
 """
 
-from typing import Tuple
-
+import numpy as np
 import pandas as pd
 
+from pywrangler.util.sanitizer import ensure_tuple
+from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
 from pywrangler.wranglers.base import BaseWrangler
 
 
@@ -62,7 +63,7 @@ class PandasWrangler(BaseWrangler):
             raise ValueError('Dataframe is empty.')
 
     @staticmethod
-    def validate_columns(df: pd.DataFrame, columns: Tuple[str]):
+    def validate_columns(df: pd.DataFrame, columns: TYPE_COLUMNS):
         """Check that columns exist in dataframe and raise error if otherwise.
 
         Parameters
@@ -74,7 +75,76 @@ class PandasWrangler(BaseWrangler):
 
         """
 
+        if not columns:
+            return
+
+        columns = ensure_tuple(columns)
+
         for column in columns:
             if column not in df.columns:
                 raise ValueError('Column with name `{}` does not exist. '
-                                 'Please check parameter settings.')
+                                 'Please check parameter settings.'
+                                 .format(column))
+
+    @staticmethod
+    def sort_values(df: pd.DataFrame,
+                    order_columns: TYPE_COLUMNS,
+                    ascending: TYPE_ASCENDING) -> pd.DataFrame:
+        """Convenient function to return sorted dataframe while taking care of
+         optional order columns and order (ascending/descending).
+
+         """
+
+        if order_columns:
+            return df.sort_values(list(order_columns),
+                                  ascending=list(ascending))
+        else:
+            return df
+
+    @staticmethod
+    def groupby(df: pd.DataFrame, groupby_columns: TYPE_COLUMNS):
+        """Convenient function to group by a dataframe while taking care of
+         optional groupby columns. Always returns a `DataFrameGroupBy` object.
+
+         """
+
+        if groupby_columns:
+            return df.groupby(list(groupby_columns))
+        else:
+            return df.groupby(np.zeros(df.shape[0]))
+
+
+class PandasSingleNoFit(PandasWrangler):
+    """Mixin class defining `fit` and `fit_transform` for all wranglers with
+    a single data frame input and output with no fitting necessary.
+
+    """
+
+    def fit(self, df: pd.DataFrame):
+        """Do nothing and return the wrangler unchanged.
+
+        This method is just there to implement the usual API and hence work in
+        pipelines.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+
+        """
+
+        return self
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply fit and transform in sequence at once.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+
+        Returns
+        -------
+        result: pd.DataFrame
+
+        """
+
+        return self.fit(df).transform(df)
