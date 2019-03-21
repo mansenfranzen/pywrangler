@@ -110,7 +110,7 @@ class BaseWrangler:
         template = '{wrangler_name} ({computation_engine})\n\n{parameters}'\
 
         parameters = (_pprint.header("Parameters", 3) +
-                      _pprint.enumeration(self.get_params().items(), 3))
+                      _pprint.enumeration(self.get_params(), 3))
 
         _repr = template.format(wrangler_name=self.__class__.__name__,
                                 computation_engine=self.computation_engine,
