@@ -8,11 +8,13 @@ import sys
 from typing import Iterable, List
 
 import numpy as np
+import pandas as pd
 
 from pywrangler.exceptions import NotProfiledError
 from pywrangler.util import sanitizer
 from pywrangler.util._pprint import enumeration, header, sizeof
 from pywrangler.util.helper import cached_property
+from pywrangler.wranglers.pandas.base import PandasWrangler
 
 
 def allocate_memory(size: float) -> np.ndarray:
@@ -43,17 +45,23 @@ def allocate_memory(size: float) -> np.ndarray:
     return memory_holder
 
 
-class BaseProfile:
-    """Base class defining interface and providing common helper methods.
+class BaseProfiler:
+    """Base class defining interface and providing common helper methods for
+    memory and time profiler.
 
     By convention, the profiled object should always the be the first argument
-    (ignoring self) passed to `__init__`. All public, relevant profiling
-    metrics have to be defined as properties. All private attributes (methods
-    and variables) need to start with an underscore.
+    (ignoring self) passed to `__init__`. All public profiling metrics have to
+    be defined as properties. All private attributes need to start with an
+    underscore.
 
     """
 
     def profile(self, *args, **kwargs):
+        """Contains the actual profiling implementation and should always
+        return self.
+
+        """
+
         raise NotImplementedError
 
     def report(self):
@@ -85,6 +93,10 @@ class BaseProfile:
               enumeration(metric_values), sep='')
 
     def profile_report(self, *args, **kwargs):
+        """Calls profile and report in sequence.
+
+        """
+
         self.profile(*args, **kwargs).report()
 
     def _check_is_profiled(self, attributes: Iterable[str]) -> None:
@@ -136,7 +148,7 @@ class BaseProfile:
         return int(size_mib * (2 ** 20))
 
 
-class MemoryProfile(BaseProfile):
+class MemoryProfiler(BaseProfiler):
     """Approximate the maximum increase in memory usage when calling a given
     function. The maximum increase is defined as the difference between the
     maximum memory usage during function execution and the baseline memory
@@ -205,7 +217,7 @@ class MemoryProfile(BaseProfile):
 
         """
 
-        self._check_is_profiled(['_max_usages', '_baselines'])
+        self._check_is_profiled(['_max_usages'])
 
         return self._max_usages
 
@@ -217,7 +229,7 @@ class MemoryProfile(BaseProfile):
 
         """
 
-        self._check_is_profiled(['_max_usages', '_baselines'])
+        self._check_is_profiled(['_baselines'])
 
         return self._baselines
 
@@ -261,43 +273,78 @@ class MemoryProfile(BaseProfile):
         return float(np.mean(changes))
 
 
-class PandasMemoryProfiler(BaseProfile):
-    """Approximate memory usage for wrangler execution via `fit_transform`
-    for given input dataframes.
+class PandasMemoryProfiler(BaseProfiler):
+    """Approximate memory usage for pandas wrangler instances.
 
-    Computes the ratio of maximum memory usage and input memory usage as an
-    estimate of how many times more memory is required for wrangler execution
-    in regard to the input memory usage.
+    Memory consumption is profiled while calling `fit_transform` for given
+    input dataframes.
+
+    As a key metric, `usage_ratio` is computed. It refers to the amount of
+    memory which is required to execute the `fit_transform` step. More
+    concretely, it estimates how much more memory is used standardized by the
+    input memory usage (memory usage increase during function execution divided
+    by memory usage of input dataframes). In other words, if you have a 1GB
+    input dataframe, and the `usage_ratio` is 5, `fit_transform` needs 5GB free
+    memory available to succeed. A `usage_ratio` of 0.5 given a 2GB input
+    dataframe would require 1GB free memory available for computation.
+
+    Parameters
+    ----------
+    wrangler: pywrangler.wranglers.pandas.base.PandasWrangler
+        The wrangler instance to be profiled.
+    repetitions: int
+        The number of measurements for memory profiling.
+
+    Attributes
+    ----------
+    usage_increases_mean: float
+        The mean of the absolute memory increases across all iterations in
+        bytes.
+    usage_input: int
+        Memory usage of input dataframes in bytes.
+    usage_output: int
+        Memory usage of output dataframes in bytes.
+    usage_ratio: float
+        The amount of memory required for computation in units of input
+        memory usage.
 
     """
 
-    def __init__(self, wrangler, repetitions=5, precision=2):
+    def __init__(self, wrangler: PandasWrangler, repetitions: int = 5):
         self._wrangler = wrangler
         self._repetitions = repetitions
-        self._precision = precision
 
         self._memory_profile = None
         self._usage_input = None
         self._usage_output = None
 
-    def profile(self, *dfs, **kwargs):
+    def profile(self, *dfs: pd.DataFrame, **kwargs):
+        """Profiles the actual memory usage given input dataframes `dfs`
+        which are passed to `fit_transform`.
 
-        memory_profile = MemoryProfile(self._wrangler.fit_transform,
-                                       self._repetitions)
-        self._memory_profile = memory_profile.profile(*dfs, **kwargs)
 
+
+        """
+
+        # usage input
         self._usage_input = self._memory_usage_dfs(*dfs)
 
+        # usage output
         dfs_output = self._wrangler.fit_transform(*dfs)
         dfs_output = sanitizer.ensure_tuple(dfs_output)
         self._usage_output = self._memory_usage_dfs(*dfs_output)
 
+        # usage during fit_transform
+        memory_profile = MemoryProfiler(self._wrangler.fit_transform,
+                                        self._repetitions)
+        self._memory_profile = memory_profile.profile(*dfs, **kwargs)
+
         return self
 
     @property
-    def usage_increases_mean(self):
+    def usage_increases_mean(self) -> float:
         """Returns the mean of the absolute memory increases across all
-        iterations.
+        iterations in bytes.
 
         """
 
@@ -324,12 +371,14 @@ class PandasMemoryProfiler(BaseProfile):
 
     @cached_property
     def usage_ratio(self) -> float:
-        """Returns the ratio of maximum memory usage and input memory usage.
-        A value of 0 means no memory consumption during execution. A value of 1
-        means that the wrangler additionally requires the same amount of the
-        input memory usage during the `transform` step. A value of 2 means that
-        the wrangler requires twice the amount of the input dataframes memory
-        usage.
+        """Refers to the amount of memory which is required to execute the
+        `fit_transform` step. More concretely, it estimates how much more
+        memory is used standardized by the input memory usage (memory usage
+        increase during function execution divided by memory usage of input
+        dataframes). In other words, if you have a 1GB input dataframe, and the
+        `usage_ratio` is 5, `fit_transform` needs 5GB free memory available to
+        succeed. A `usage_ratio` of 0.5 given a 2GB input dataframe would
+        require 1GB free memory available for computation.
 
         """
 
@@ -337,30 +386,40 @@ class PandasMemoryProfiler(BaseProfile):
 
     def report(self):
         """Profile memory usage via `profile` and provide human readable
-        report.
+        report including memory usage of input and output dataframes, memory
+        usage during `fit_transform`, the usage ratio and shows if
+        the wrangler may have side effects in regard to memory consumption via
+        the change in baseline memory usage.
+
+        Returns
+        -------
+        None. Prints report to stdout.
 
         """
+
+        enum_kwargs = dict(align_width=15, bullet_char="")
 
         # string part for header
         wrangler_name = self._wrangler.__class__.__name__
         str_header = header("{} - memory usage".format(wrangler_name))
 
         # string part for input and output dfs
-        dict_dfs = {"Input dfs": sizeof(self.usage_input, self._precision),
-                    "Ouput dfs": sizeof(self.usage_output, self._precision)}
+        dict_dfs = {"Input dfs": sizeof(self.usage_input),
+                    "Ouput dfs": sizeof(self.usage_output)}
 
-        str_dfs = enumeration(dict_dfs, align_width=15, bullet_char="")
+        str_dfs = enumeration(dict_dfs, **enum_kwargs)
 
         # string part for transform/fit and ratio
         str_inc = sizeof(self.usage_increases_mean)
-        str_std = sizeof(self._memory_profile.increases_std,
-                         self._precision, width=0)
+        str_std = sizeof(self._memory_profile.increases_std, width=0)
         str_inc += " (Std: {})".format(str_std)
         str_ratio = "{:>7.2f}".format(self.usage_ratio)
+        str_baseline_change = sizeof(self._memory_profile.baseline_change)
         dict_inc = {"Fit/Transform": str_inc,
-                    "Ratio": str_ratio}
+                    "Ratio": str_ratio,
+                    "Baseline change": str_baseline_change}
 
-        str_inc = enumeration(dict_inc, align_width=15, bullet_char="")
+        str_inc = enumeration(dict_inc, **enum_kwargs)
 
         # build complete string and print
         template = "{}\n{}\n\n{}"
@@ -369,8 +428,18 @@ class PandasMemoryProfiler(BaseProfile):
         print(report_string)
 
     @staticmethod
-    def _memory_usage_dfs(*dfs) -> int:
+    def _memory_usage_dfs(*dfs: pd.DataFrame) -> int:
         """Return the memory usage in Bytes for all dataframes `dfs`.
+
+        Parameters
+        ----------
+        dfs: pd.DataFrame
+            The pandas dataframes for which memory usage should be computed.
+
+        Returns
+        -------
+        memory_usage: int
+            The computed memory usage in bytes.
 
         """
 
