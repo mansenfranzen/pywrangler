@@ -5,7 +5,8 @@
 import gc
 import inspect
 import sys
-from typing import Iterable, List
+import timeit
+from typing import Callable, Iterable, List, Union
 
 import numpy as np
 import pandas as pd
@@ -157,7 +158,7 @@ class MemoryProfiler(BaseProfiler):
     In addition, compute the mean increase in baseline memory usage between
     repetitions which might indicate memory leakage.
 
-    The current solution is based on `memory_profiler` and is inspired by the
+    The implementation is based on `memory_profiler` and is inspired by the
     IPython `%memit` magic which additionally calls `gc.collect()` before
     executing the function to get more stable results.
 
@@ -273,7 +274,143 @@ class MemoryProfiler(BaseProfiler):
         return float(np.mean(changes))
 
 
-class PandasMemoryProfiler(BaseProfiler):
+class TimeProfiler(BaseProfiler):
+    """Approximate the time required to call a given function.
+
+    The implementation is based on standard library's `timeit` module. By
+    default, the number of repetitions is estimated if not set explicitly.
+
+    Parameters
+    ----------
+    func: callable
+        Callable object to be memory profiled.
+    repetitions: None, int, optional
+        Number of repetitions. If `None`, `timeit.Timer.autorange` will
+        determine a sensible default.
+
+    Attributes
+    ----------
+    median: float
+        The median of the timing measurements in seconds.
+    standard_deviation: float
+        The standard deviation of the timing measurements in seconds.
+    fastast: float
+        The fastest value of the timing measurements in seconds.
+    repetitions: int
+        The number of measurements.
+
+    """
+
+    def __init__(self, func: Callable, repetitions: Union[None, int] = None):
+        self._func = func
+        self._repetitions = repetitions
+
+        self._timings = None
+        self._timings_mean = None
+        self._timings_std = None
+        self._fastest = None
+
+    def profile(self, *args, **kwargs):
+        """Executes the actual time profiling.
+
+        Parameters
+        ----------
+        args: iterable, optional
+            Optional positional arguments passed to `func`.
+        kwargs: mapping, optional
+            Optional keyword arguments passed to `func`.
+
+        """
+
+        def wrapper():
+            """Helper function without arguments which is passed to `repeat`
+            which only calls given function with provided args and kwargs.
+
+            """
+
+            self._func(*args, **kwargs)
+
+        timer = timeit.Timer(stmt=wrapper)
+
+        if self._repetitions is None:
+            repeat, _ = timer.autorange(None)
+        else:
+            repeat = self._repetitions
+
+        self._timings = timer.repeat(number=1, repeat=repeat)
+
+        return self
+
+    @property
+    def median(self) -> float:
+        """Returns the median of all timeit measurements in seconds.
+
+        """
+        self._check_is_profiled(['_timings'])
+
+        return float(np.median(self._timings))
+
+    @property
+    def standard_deviation(self) -> float:
+        """Returns the standard deviation of all timeit measurements in
+        seconds.
+
+        """
+        self._check_is_profiled(['_timings'])
+
+        return float(np.std(self._timings))
+
+    @property
+    def fastest(self) -> float:
+        """Returns the fastest timing measurement in seconds.
+
+        """
+
+        self._check_is_profiled(['_timings'])
+
+        return min(self._timings)
+
+    @property
+    def repetitions(self) -> int:
+        """Returns the number of measurements.
+
+        """
+
+        return len(self._timings)
+
+
+class PandasTimeProfiler(TimeProfiler):
+    """Approximate time which pandas wrangler instances require during their
+    `fit_transform` step.
+
+    Parameters
+    ----------
+    wrangler: pywrangler.wranglers.pandas.base.PandasWrangler
+         The wrangler instance to be profiled.
+    repetitions: None, int, optional
+        Number of repetitions. If `None`, `timeit.Timer.autorange` will
+        determine a sensible default.
+
+    Attributes
+    ----------
+    median: float
+        The median of the timing measurements in seconds.
+    standard_deviation: float
+        The standard deviation of the timing measurements in seconds.
+    fastast: float
+        The fastest value of the timing measurements in seconds.
+    repetitions: int
+        The number of measurements.
+
+    """
+
+    def __init__(self, wrangler: PandasWrangler,
+                 repetitions: Union[None, int] = None):
+        self._wrangler = wrangler
+        super().__init__(wrangler.fit_transform, repetitions)
+
+
+class PandasMemoryProfiler(MemoryProfiler):
     """Approximate memory usage for pandas wrangler instances.
 
     Memory consumption is profiled while calling `fit_transform` for given
@@ -312,17 +449,15 @@ class PandasMemoryProfiler(BaseProfiler):
 
     def __init__(self, wrangler: PandasWrangler, repetitions: int = 5):
         self._wrangler = wrangler
-        self._repetitions = repetitions
 
-        self._memory_profile = None
         self._usage_input = None
         self._usage_output = None
+
+        super().__init__(wrangler.fit_transform, repetitions)
 
     def profile(self, *dfs: pd.DataFrame, **kwargs):
         """Profiles the actual memory usage given input dataframes `dfs`
         which are passed to `fit_transform`.
-
-
 
         """
 
@@ -335,9 +470,7 @@ class PandasMemoryProfiler(BaseProfiler):
         self._usage_output = self._memory_usage_dfs(*dfs_output)
 
         # usage during fit_transform
-        memory_profile = MemoryProfiler(self._wrangler.fit_transform,
-                                        self._repetitions)
-        self._memory_profile = memory_profile.profile(*dfs, **kwargs)
+        super().profile(*dfs, **kwargs)
 
         return self
 
@@ -348,8 +481,7 @@ class PandasMemoryProfiler(BaseProfiler):
 
         """
 
-        self._check_is_profiled(['_memory_profile'])
-        return self._memory_profile.increases_mean
+        return self.increases_mean
 
     @property
     def usage_input(self) -> float:
@@ -411,10 +543,10 @@ class PandasMemoryProfiler(BaseProfiler):
 
         # string part for transform/fit and ratio
         str_inc = sizeof(self.usage_increases_mean)
-        str_std = sizeof(self._memory_profile.increases_std, width=0)
+        str_std = sizeof(self.increases_std, width=0)
         str_inc += " (Std: {})".format(str_std)
         str_ratio = "{:>7.2f}".format(self.usage_ratio)
-        str_baseline_change = sizeof(self._memory_profile.baseline_change)
+        str_baseline_change = sizeof(self.baseline_change)
         dict_inc = {"Fit/Transform": str_inc,
                     "Ratio": str_ratio,
                     "Baseline change": str_baseline_change}

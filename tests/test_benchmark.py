@@ -3,6 +3,7 @@
 """
 
 import sys
+import time
 
 import pytest
 
@@ -13,6 +14,8 @@ from pywrangler.benchmark import (
     BaseProfiler,
     MemoryProfiler,
     PandasMemoryProfiler,
+    PandasTimeProfiler,
+    TimeProfiler,
     allocate_memory
 )
 from pywrangler.exceptions import NotProfiledError
@@ -181,3 +184,60 @@ def test_pandas_memory_profiler_usage_ratio():
     memory_profiler = PandasMemoryProfiler(DummyWrangler())
 
     assert memory_profiler.profile(df_input).usage_ratio > test_output
+
+
+def test_time_profiler_return_self():
+    def dummy():
+        pass
+
+    time_profiler = TimeProfiler(dummy, 1)
+    assert time_profiler.profile() is time_profiler
+
+
+def test_time_profiler_properties():
+    def dummy():
+        pass
+
+    time_profiler = TimeProfiler(dummy)
+    time_profiler._timings = [1, 1, 3, 3]
+
+    assert time_profiler.median == 2
+    assert time_profiler.standard_deviation == 1
+    assert time_profiler.fastest == 1
+    assert time_profiler.repetitions == 4
+
+
+def test_time_profiler_repetitions():
+    def dummy():
+        pass
+
+    time_profiler = TimeProfiler(dummy, repetitions=10).profile()
+
+    assert time_profiler.repetitions == 10
+
+
+def test_time_profiler_fastest():
+    sleep = 0.0001
+
+    def dummy():
+        time.sleep(sleep)
+        pass
+
+    time_profiler = TimeProfiler(dummy, repetitions=1).profile()
+
+    assert time_profiler.fastest >= sleep
+
+
+def test_pandas_time_profiler_fastest():
+
+    sleep = 0.0001
+    df_dummy = pd.DataFrame()
+
+    class DummyWrangler(PandasSingleNoFit):
+        def transform(self, df):
+            time.sleep(sleep)
+            pass
+
+    time_profiler = PandasTimeProfiler(DummyWrangler(), 1).profile(df_dummy)
+
+    time_profiler.fastest >= sleep
