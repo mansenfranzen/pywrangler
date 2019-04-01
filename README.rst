@@ -29,14 +29,13 @@ daily basis, however, one often encounters **problems which go beyond the
 common dataframe API usage**. They typically require a combination of multiple
 transformations and aggregations in order to achieve the desired outcome. For
 example, extracting intervals with given start and end values from raw time
-series is a non trivial task which is out of scope for native dataframe
-functionality.
+series is out of scope for native dataframe functionality.
 
 **pywrangler** accomplishes such requirements with care while exposing so
 called *data wranglers*. A data wrangler serves a specific use case just like
-the one mentioned above. It takes one ore more input dataframes, applies a
+the one mentioned above. It takes one or more input dataframes, applies a
 computation which is usually built on top of existing dataframe API, and
-returns one ore more output dataframes.
+returns one or more output dataframes.
 
 Why should I use pywrangler?
 ============================
