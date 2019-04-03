@@ -6,7 +6,7 @@ import gc
 import inspect
 import sys
 import timeit
-from typing import Callable, Iterable, List, Union
+from typing import Any, Callable, Iterable, List, Union
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,17 @@ from pywrangler.exceptions import NotProfiledError
 from pywrangler.util import sanitizer
 from pywrangler.util._pprint import enumeration, header, sizeof
 from pywrangler.util.helper import cached_property
-from pywrangler.wranglers.pandas.base import PandasWrangler
+from pywrangler.wranglers.base import BaseWrangler
+
+try:
+    from pyspark.sql import DataFrame as SparkDataFrame
+except ImportError:
+    SparkDataFrame = Any
+
+try:
+    from dask.dataframe import DataFrame as DaskDataFrame
+except ImportError:
+    DaskDataFrame = Any
 
 
 def allocate_memory(size: float) -> np.ndarray:
@@ -395,6 +405,35 @@ class TimeProfiler(BaseProfiler):
 
         return len(self._timings)
 
+    def report(self):
+        """Profile time via `profile` and provide human readable report.
+
+        Returns
+        -------
+        None. Prints report to stdout.
+
+        """
+
+        enum_kwargs = dict(align_width=15, bullet_char="")
+
+        # string part for header
+        wrangler_name = self._wrangler.__class__.__name__
+        str_header = header("{} - time profiling".format(wrangler_name))
+
+        # string part for values
+        dict_values = {"Fastest": "{:.2f}s".format(self.fastest),
+                       "Median": "{:.2f}s".format(self.median),
+                       "Std": "{:.2f}s".format(self.standard_deviation),
+                       "Repetitions": self.repetitions}
+
+        str_values = enumeration(dict_values, **enum_kwargs)
+
+        # build complete string and print
+        template = "{}\n{}\n"
+        report_string = template.format(str_header, str_values)
+
+        print(report_string)
+
 
 class PandasTimeProfiler(TimeProfiler):
     """Approximate time that a pandas wrangler instance requires to execute the
@@ -402,7 +441,7 @@ class PandasTimeProfiler(TimeProfiler):
 
     Parameters
     ----------
-    wrangler: pywrangler.wranglers.pandas.base.PandasWrangler
+    wrangler: pywrangler.wranglers.base.BaseWrangler
          The wrangler instance to be profiled.
     repetitions: None, int, optional
         Number of repetitions. If `None`, `timeit.Timer.autorange` will
@@ -423,7 +462,7 @@ class PandasTimeProfiler(TimeProfiler):
 
     """
 
-    def __init__(self, wrangler: PandasWrangler,
+    def __init__(self, wrangler: BaseWrangler,
                  repetitions: Union[None, int] = None):
         self._wrangler = wrangler
         super().__init__(wrangler.fit_transform, repetitions)
@@ -464,7 +503,7 @@ class PandasMemoryProfiler(MemoryProfiler):
 
     """
 
-    def __init__(self, wrangler: PandasWrangler, repetitions: int = 5):
+    def __init__(self, wrangler: BaseWrangler, repetitions: int = 5):
         self._wrangler = wrangler
 
         self._usage_input = None
@@ -587,3 +626,74 @@ class PandasMemoryProfiler(MemoryProfiler):
                       for df in dfs]
 
         return int(np.sum(mem_usages))
+
+
+class SparkTimeProfiler(TimeProfiler):
+    """Approximate time that a spark wrangler instance requires to execute the
+    `fit_transform` step.
+
+    Please note, input dataframes are cached before timing execution to ensure
+    timing measurements only capture wrangler's `fit_transform`. This may cause
+    problems if the size of input dataframes exceeds available memory.
+
+    Parameters
+    ----------
+    wrangler: pywrangler.wranglers.base.BaseWrangler
+         The wrangler instance to be profiled.
+    repetitions: None, int, optional
+        Number of repetitions. If `None`, `timeit.Timer.autorange` will
+        determine a sensible default.
+
+    Attributes
+    ----------
+    timings: list
+        The timing measurements in seconds.
+    median: float
+        The median of the timing measurements in seconds.
+    standard_deviation: float
+        The standard deviation of the timing measurements in seconds.
+    fastast: float
+        The fastest value of the timing measurements in seconds.
+    repetitions: int
+        The number of measurements.
+
+    """
+
+    def __init__(self, wrangler: BaseWrangler,
+                 repetitions: Union[None, int] = None):
+        self._wrangler = wrangler
+
+        def wrapper(*args, **kwargs):
+            """Wrapper function to call `count()` to enforce computation.
+
+            """
+
+            wrangler.fit_transform(*args, **kwargs).count()
+
+        super().__init__(wrapper, repetitions)
+
+    def profile(self, *dfs: SparkDataFrame, **kwargs):
+        """Profiles timing given input dataframes `dfs` which are passed to
+        `fit_transform`.
+
+        Please note, input dataframes are cached before timing execution to
+        ensure timing measurements only capture wrangler's `fit_transform`.
+        This may cause problems if the size of input dataframes exceeds
+        available memory.
+
+        """
+
+        # cache input dataframes
+        dfs_cached = [df.cache() for df in dfs]
+
+        # enforce caching calling count() action
+        for df in dfs_cached:
+            df.count()
+
+        super().profile(*dfs_cached, **kwargs)
+
+        # clear caches
+        for df in dfs_cached:
+            df.unpersist()
+
+        return self

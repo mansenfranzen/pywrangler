@@ -15,11 +15,17 @@ from pywrangler.benchmark import (
     MemoryProfiler,
     PandasMemoryProfiler,
     PandasTimeProfiler,
+    SparkTimeProfiler,
     TimeProfiler,
     allocate_memory
 )
 from pywrangler.exceptions import NotProfiledError
 from pywrangler.wranglers.pandas.base import PandasSingleNoFit
+
+try:
+    from pywrangler.wranglers.spark.base import SparkSingleNoFit
+except ImportError:
+    SparkSingleNoFit = None
 
 MIB = 2 ** 20
 
@@ -195,7 +201,6 @@ def test_time_profiler_return_self():
 
 
 def test_time_profiler_properties():
-
     def dummy():
         pass
 
@@ -231,15 +236,59 @@ def test_time_profiler_fastest():
 
 
 def test_pandas_time_profiler_fastest():
+    """Basic test for pandas time profiler ensuring fastest timing is slower
+    than forced sleep.
+
+    """
 
     sleep = 0.0001
-    df_dummy = pd.DataFrame()
+    df_input = pd.DataFrame()
 
     class DummyWrangler(PandasSingleNoFit):
         def transform(self, df):
             time.sleep(sleep)
-            pass
+            return df
 
-    time_profiler = PandasTimeProfiler(DummyWrangler(), 1).profile(df_dummy)
+    time_profiler = PandasTimeProfiler(DummyWrangler(), 1).profile(df_input)
 
-    time_profiler.fastest >= sleep
+    assert time_profiler.fastest >= sleep
+
+
+@pytest.mark.pyspark
+def test_spark_time_profiler_fastest(spark):
+    """Basic test for spark time profiler ensuring fastest timing is slower
+    than forced sleep.
+
+    """
+
+    sleep = 0.0001
+    df_input = spark.range(10).toDF("col")
+
+    class DummyWrangler(SparkSingleNoFit):
+        def transform(self, df):
+            time.sleep(sleep)
+            return df
+
+    time_profiler = SparkTimeProfiler(DummyWrangler(), 1).profile(df_input)
+
+    assert time_profiler.fastest >= sleep
+
+
+@pytest.mark.pyspark
+def test_spark_time_profiler_no_caching(spark):
+    """Pyspark input dataframes are cached during time profiling. Ensure input
+    dataframes are released from caching after profiling.
+
+    """
+
+    sleep = 0.0001
+    df_input = spark.range(10).toDF("col")
+
+    class DummyWrangler(SparkSingleNoFit):
+        def transform(self, df):
+            time.sleep(sleep)
+            return df
+
+    SparkTimeProfiler(DummyWrangler(), 1).profile(df_input)
+
+    assert df_input.is_cached is False
