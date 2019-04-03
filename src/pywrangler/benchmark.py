@@ -174,6 +174,9 @@ class MemoryProfiler(BaseProfiler):
         Callable object to be memory profiled.
     repetitions: int, optional
         Number of repetitions.
+    interval: float, optional
+        Defines interval duration between consecutive memory usage
+        measurements in seconds.
 
     Notes
     -----
@@ -183,9 +186,10 @@ class MemoryProfiler(BaseProfiler):
 
     """
 
-    def __init__(self, func, repetitions=5):
+    def __init__(self, func, repetitions: int = 5, interval: float = 0.01):
         self._func = func
         self._repetitions = repetitions
+        self._interval = interval
 
         self._max_usages = None
         self._baselines = None
@@ -212,10 +216,12 @@ class MemoryProfiler(BaseProfiler):
         while counter < self._repetitions:
             gc.collect()
             baseline = memory_usage()[0]
-            max_usage = memory_usage(mem_args, max_usage=True)[0]
+            max_usage = memory_usage(mem_args,
+                                     interval=self._interval,
+                                     max_usage=True)
 
             baselines.append(self._mb_to_bytes(baseline))
-            max_usages.append(self._mb_to_bytes(max_usage))
+            max_usages.append(self._mb_to_bytes(max_usage[0]))
             counter += 1
 
         self._max_usages = max_usages
@@ -487,6 +493,9 @@ class PandasMemoryProfiler(MemoryProfiler):
         The wrangler instance to be profiled.
     repetitions: int
         The number of measurements for memory profiling.
+    interval: float, optional
+        Defines interval duration between consecutive memory usage
+        measurements in seconds.
 
     Attributes
     ----------
@@ -503,13 +512,14 @@ class PandasMemoryProfiler(MemoryProfiler):
 
     """
 
-    def __init__(self, wrangler: BaseWrangler, repetitions: int = 5):
+    def __init__(self, wrangler: BaseWrangler, repetitions: int = 5,
+                 interval: float = 0.01):
         self._wrangler = wrangler
 
         self._usage_input = None
         self._usage_output = None
 
-        super().__init__(wrangler.fit_transform, repetitions)
+        super().__init__(wrangler.fit_transform, repetitions, interval)
 
     def profile(self, *dfs: pd.DataFrame, **kwargs):
         """Profiles the actual memory usage given input dataframes `dfs`
@@ -695,5 +705,77 @@ class SparkTimeProfiler(TimeProfiler):
         # clear caches
         for df in dfs_cached:
             df.unpersist()
+            del df
+
+        del dfs_cached
+
+        return self
+
+
+class DaskTimeProfiler(TimeProfiler):
+    """Approximate time that a dask wrangler instance requires to execute the
+    `fit_transform` step.
+
+    Please note, input dataframes are cached before timing execution to ensure
+    timing measurements only capture wrangler's `fit_transform`. This may cause
+    problems if the size of input dataframes exceeds available memory.
+
+    Parameters
+    ----------
+    wrangler: pywrangler.wranglers.base.BaseWrangler
+         The wrangler instance to be profiled.
+    repetitions: None, int, optional
+        Number of repetitions. If `None`, `timeit.Timer.autorange` will
+        determine a sensible default.
+
+    Attributes
+    ----------
+    timings: list
+        The timing measurements in seconds.
+    median: float
+        The median of the timing measurements in seconds.
+    standard_deviation: float
+        The standard deviation of the timing measurements in seconds.
+    fastast: float
+        The fastest value of the timing measurements in seconds.
+    repetitions: int
+        The number of measurements.
+
+    """
+
+    def __init__(self, wrangler: BaseWrangler,
+                 repetitions: Union[None, int] = None):
+        self._wrangler = wrangler
+
+        def wrapper(*args, **kwargs):
+            """Wrapper function to call `compute()` to enforce computation.
+
+            """
+
+            wrangler.fit_transform(*args, **kwargs).compute()
+
+        super().__init__(wrapper, repetitions)
+
+    def profile(self, *dfs: DaskDataFrame, **kwargs):
+        """Profiles timing given input dataframes `dfs` which are passed to
+        `fit_transform`.
+
+        Please note, input dataframes are cached before timing execution to
+        ensure timing measurements only capture wrangler's `fit_transform`.
+        This may cause problems if the size of input dataframes exceeds
+        available memory.
+
+        """
+
+        # cache input dataframes
+        dfs_cached = [df.persist() for df in dfs]
+
+        super().profile(*dfs_cached, **kwargs)
+
+        # clear caches
+        for df in dfs_cached:
+            del df
+
+        del dfs_cached
 
         return self

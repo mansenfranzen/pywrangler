@@ -12,6 +12,7 @@ import pandas as pd
 
 from pywrangler.benchmark import (
     BaseProfiler,
+    DaskTimeProfiler,
     MemoryProfiler,
     PandasMemoryProfiler,
     PandasTimeProfiler,
@@ -26,6 +27,11 @@ try:
     from pywrangler.wranglers.spark.base import SparkSingleNoFit
 except ImportError:
     SparkSingleNoFit = None
+
+try:
+    from pywrangler.wranglers.dask.base import DaskSingleNoFit
+except ImportError:
+    DaskSingleNoFit = None
 
 MIB = 2 ** 20
 
@@ -292,3 +298,25 @@ def test_spark_time_profiler_no_caching(spark):
     SparkTimeProfiler(DummyWrangler(), 1).profile(df_input)
 
     assert df_input.is_cached is False
+
+
+@pytest.mark.dask
+def test_dask_time_profiler_fastest(spark):
+    """Basic test for dask time profiler ensuring fastest timing is slower
+    than forced sleep.
+
+    """
+
+    from dask import dataframe as dd
+
+    sleep = 0.0001
+    df_input = dd.from_pandas(pd.DataFrame(np.random.rand(10, 10)), 2)
+
+    class DummyWrangler(DaskSingleNoFit):
+        def transform(self, df):
+            time.sleep(sleep)
+            return df
+
+    time_profiler = DaskTimeProfiler(DummyWrangler(), 1).profile(df_input)
+
+    assert time_profiler.fastest >= sleep
