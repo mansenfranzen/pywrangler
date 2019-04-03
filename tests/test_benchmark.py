@@ -151,7 +151,7 @@ def test_pandas_memory_profiler_usage_increases_mean():
 
     memory_profiler = PandasMemoryProfiler(DummyWrangler())
 
-    assert memory_profiler.profile(empty_df).usage_increases_mean > 29 * MIB
+    assert memory_profiler.profile(empty_df).increases_mean > 29 * MIB
 
 
 def test_pandas_memory_profiler_usage_input_output():
@@ -167,8 +167,8 @@ def test_pandas_memory_profiler_usage_input_output():
 
     memory_profiler = PandasMemoryProfiler(DummyWrangler()).profile(df_input)
 
-    assert memory_profiler.usage_input == test_df_input
-    assert memory_profiler.usage_output == test_df_output
+    assert memory_profiler.input == test_df_input
+    assert memory_profiler.output == test_df_output
 
 
 def test_pandas_memory_profiler_usage_ratio():
@@ -183,7 +183,7 @@ def test_pandas_memory_profiler_usage_ratio():
 
     memory_profiler = PandasMemoryProfiler(DummyWrangler())
 
-    assert memory_profiler.profile(df_input).usage_ratio > test_output
+    assert memory_profiler.profile(df_input).ratio > test_output
 
 
 def test_time_profiler_return_self():
@@ -195,6 +195,7 @@ def test_time_profiler_return_self():
 
 
 def test_time_profiler_properties():
+
     def dummy():
         pass
 
@@ -205,6 +206,7 @@ def test_time_profiler_properties():
     assert time_profiler.standard_deviation == 1
     assert time_profiler.fastest == 1
     assert time_profiler.repetitions == 4
+    assert time_profiler.timings == time_profiler._timings
 
 
 def test_time_profiler_repetitions():

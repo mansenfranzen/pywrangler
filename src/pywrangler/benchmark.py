@@ -19,15 +19,15 @@ from pywrangler.wranglers.pandas.base import PandasWrangler
 
 
 def allocate_memory(size: float) -> np.ndarray:
-    """Occupies memory by creating numpy array with given size (MB).
+    """Helper function for testing to allocate memory by creating numpy array
+    with given size in MiB.
 
-    Numpy is used deliberately to specifically define the used memory via
-    dtype.
+    Numpy is used deliberately to define the used memory via dtype.
 
     Parameters
     ----------
     size: float
-        Size in MB to be occupied.
+        Size in MiB to be occupied.
 
     Returns
     -------
@@ -47,13 +47,13 @@ def allocate_memory(size: float) -> np.ndarray:
 
 
 class BaseProfiler:
-    """Base class defining interface and providing common helper methods for
-    memory and time profiler.
+    """Base class defining interface and common helper methods for memory and
+    time profiler.
 
-    By convention, the profiled object should always the be the first argument
-    (ignoring self) passed to `__init__`. All public profiling metrics have to
-    be defined as properties. All private attributes need to start with an
-    underscore.
+    By convention, the profiled object should always be the first argument
+    (ignoring self) passed to `__init__`.
+    All public profiling metrics have to should be defined as properties. All
+    private attributes need to start with an underscore.
 
     """
 
@@ -66,8 +66,8 @@ class BaseProfiler:
         raise NotImplementedError
 
     def report(self):
-        """Creates basic report consisting the name of the profiler class, the
-        name of the profiled object, and all defined metrics/properties.
+        """Print simple report consisting of the name of the profiler class,
+        the name of the profiled object, and all defined metrics/properties.
 
         """
 
@@ -150,17 +150,13 @@ class BaseProfiler:
 
 
 class MemoryProfiler(BaseProfiler):
-    """Approximate the maximum increase in memory usage when calling a given
-    function. The maximum increase is defined as the difference between the
-    maximum memory usage during function execution and the baseline memory
-    usage before function execution.
+    """Approximate the increase in memory usage when calling a given function.
+    Memory increase is defined as the difference between the maximum memory
+    usage during function execution and the baseline memory usage before
+    function execution.
 
     In addition, compute the mean increase in baseline memory usage between
     repetitions which might indicate memory leakage.
-
-    The implementation is based on `memory_profiler` and is inspired by the
-    IPython `%memit` magic which additionally calls `gc.collect()` before
-    executing the function to get more stable results.
 
     Parameters
     ----------
@@ -168,6 +164,12 @@ class MemoryProfiler(BaseProfiler):
         Callable object to be memory profiled.
     repetitions: int, optional
         Number of repetitions.
+
+    Notes
+    -----
+    The implementation is based on `memory_profiler` and is inspired by the
+    IPython `%memit` magic which additionally calls `gc.collect()` before
+    executing the function to get more stable results.
 
     """
 
@@ -275,10 +277,9 @@ class MemoryProfiler(BaseProfiler):
 
 
 class TimeProfiler(BaseProfiler):
-    """Approximate the time required to call a given function.
+    """Approximate the time required to execute a function call.
 
-    The implementation is based on standard library's `timeit` module. By
-    default, the number of repetitions is estimated if not set explicitly.
+    By default, the number of repetitions is estimated if not set explicitly.
 
     Parameters
     ----------
@@ -290,6 +291,8 @@ class TimeProfiler(BaseProfiler):
 
     Attributes
     ----------
+    timings: list
+        The timing measurements in seconds.
     median: float
         The median of the timing measurements in seconds.
     standard_deviation: float
@@ -298,6 +301,10 @@ class TimeProfiler(BaseProfiler):
         The fastest value of the timing measurements in seconds.
     repetitions: int
         The number of measurements.
+
+    Notes
+    -----
+    The implementation is based on standard library's `timeit` module.
 
     """
 
@@ -342,10 +349,19 @@ class TimeProfiler(BaseProfiler):
         return self
 
     @property
+    def timings(self) -> List[float]:
+        """Returns the timeit measurements in seconds.
+
+        """
+
+        return self._timings
+
+    @property
     def median(self) -> float:
         """Returns the median of all timeit measurements in seconds.
 
         """
+
         self._check_is_profiled(['_timings'])
 
         return float(np.median(self._timings))
@@ -356,6 +372,7 @@ class TimeProfiler(BaseProfiler):
         seconds.
 
         """
+
         self._check_is_profiled(['_timings'])
 
         return float(np.std(self._timings))
@@ -380,7 +397,7 @@ class TimeProfiler(BaseProfiler):
 
 
 class PandasTimeProfiler(TimeProfiler):
-    """Approximate time which pandas wrangler instances require during their
+    """Approximate time that a pandas wrangler instance requires to execute the
     `fit_transform` step.
 
     Parameters
@@ -393,6 +410,8 @@ class PandasTimeProfiler(TimeProfiler):
 
     Attributes
     ----------
+    timings: list
+        The timing measurements in seconds.
     median: float
         The median of the timing measurements in seconds.
     standard_deviation: float
@@ -411,12 +430,10 @@ class PandasTimeProfiler(TimeProfiler):
 
 
 class PandasMemoryProfiler(MemoryProfiler):
-    """Approximate memory usage for pandas wrangler instances.
+    """Approximate memory usage that a pandas wrangler instance requires to
+    execute the `fit_transform` step.
 
-    Memory consumption is profiled while calling `fit_transform` for given
-    input dataframes.
-
-    As a key metric, `usage_ratio` is computed. It refers to the amount of
+    As a key metric, `ratio` is computed. It refers to the amount of
     memory which is required to execute the `fit_transform` step. More
     concretely, it estimates how much more memory is used standardized by the
     input memory usage (memory usage increase during function execution divided
@@ -434,14 +451,14 @@ class PandasMemoryProfiler(MemoryProfiler):
 
     Attributes
     ----------
-    usage_increases_mean: float
+    increases_mean: float
         The mean of the absolute memory increases across all iterations in
         bytes.
-    usage_input: int
+    input: int
         Memory usage of input dataframes in bytes.
-    usage_output: int
+    output: int
         Memory usage of output dataframes in bytes.
-    usage_ratio: float
+    ratio: float
         The amount of memory required for computation in units of input
         memory usage.
 
@@ -475,16 +492,7 @@ class PandasMemoryProfiler(MemoryProfiler):
         return self
 
     @property
-    def usage_increases_mean(self) -> float:
-        """Returns the mean of the absolute memory increases across all
-        iterations in bytes.
-
-        """
-
-        return self.increases_mean
-
-    @property
-    def usage_input(self) -> float:
+    def input(self) -> float:
         """Returns the memory usage of the input dataframes in bytes.
 
         """
@@ -493,7 +501,7 @@ class PandasMemoryProfiler(MemoryProfiler):
         return self._usage_input
 
     @property
-    def usage_output(self) -> float:
+    def output(self) -> float:
         """Returns the memory usage of the output dataframes in bytes.
 
         """
@@ -502,7 +510,7 @@ class PandasMemoryProfiler(MemoryProfiler):
         return self._usage_output
 
     @cached_property
-    def usage_ratio(self) -> float:
+    def ratio(self) -> float:
         """Refers to the amount of memory which is required to execute the
         `fit_transform` step. More concretely, it estimates how much more
         memory is used standardized by the input memory usage (memory usage
@@ -514,7 +522,7 @@ class PandasMemoryProfiler(MemoryProfiler):
 
         """
 
-        return self.usage_increases_mean / self.usage_input
+        return self.increases_mean / self.input
 
     def report(self):
         """Profile memory usage via `profile` and provide human readable
@@ -536,16 +544,16 @@ class PandasMemoryProfiler(MemoryProfiler):
         str_header = header("{} - memory usage".format(wrangler_name))
 
         # string part for input and output dfs
-        dict_dfs = {"Input dfs": sizeof(self.usage_input),
-                    "Ouput dfs": sizeof(self.usage_output)}
+        dict_dfs = {"Input dfs": sizeof(self.input),
+                    "Ouput dfs": sizeof(self.output)}
 
         str_dfs = enumeration(dict_dfs, **enum_kwargs)
 
         # string part for transform/fit and ratio
-        str_inc = sizeof(self.usage_increases_mean)
+        str_inc = sizeof(self.increases_mean)
         str_std = sizeof(self.increases_std, width=0)
         str_inc += " (Std: {})".format(str_std)
-        str_ratio = "{:>7.2f}".format(self.usage_ratio)
+        str_ratio = "{:>7.2f}".format(self.ratio)
         str_baseline_change = sizeof(self.baseline_change)
         dict_inc = {"Fit/Transform": str_inc,
                     "Ratio": str_ratio,
@@ -561,7 +569,7 @@ class PandasMemoryProfiler(MemoryProfiler):
 
     @staticmethod
     def _memory_usage_dfs(*dfs: pd.DataFrame) -> int:
-        """Return the memory usage in Bytes for all dataframes `dfs`.
+        """Return memory usage in bytes for all given dataframes.
 
         Parameters
         ----------
