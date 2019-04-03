@@ -45,7 +45,7 @@ def test_pyspark_import():
 
 @pytest.mark.pyspark
 def test_pyspark_pandas_interaction(spark):
-    """Check simple interaction between pyspark and pandes.
+    """Check simple interaction between pyspark and pandas.
 
     """
 
