@@ -82,9 +82,25 @@ def test_enumeration_list_with_bullet():
     assert _pprint.enumeration(test_input, bullet_char="o") == test_output
 
 
-def test_sizeof():
-    assert _pprint.sizeof(1024, precision=1, width=0) == '1.0 KiB'
-    assert _pprint.sizeof(1024, precision=1) == '   1.0 KiB'
-    assert _pprint.sizeof(1024, precision=1, align="<") == '1.0    KiB'
-    assert _pprint.sizeof(1024 ** 2, precision=1, width=0) == '1.0 MiB'
-    assert _pprint.sizeof(1024 ** 8, precision=2, width=0) == '1.00 YiB'
+def test_pretty_file_size():
+    pfs = _pprint.pretty_file_size
+
+    assert pfs(1024, precision=1, width=4) == ' 1.0 KiB'
+    assert pfs(1024, precision=1, width=4, align="<") == '1.0  KiB'
+    assert pfs(1024, precision=1) == '1.0 KiB'
+    assert pfs(1024 ** 2, precision=1, width=0) == '1.0 MiB'
+    assert pfs(1024 ** 8, precision=2, width=0) == '1.00 YiB'
+
+
+def test_pretty_time_duration():
+    ptd = _pprint.pretty_time_duration
+
+    assert ptd(1.1) == "1.1 s"
+    assert ptd(1.59, width=5) == "  1.6 s"
+    assert ptd(1.55, width=7, precision=2) == "   1.55 s"
+    assert ptd(1.55, width=7, precision=2, align="<") == "1.55    s"
+    assert ptd(120, precision=2) == "2.00 min"
+    assert ptd(5400, precision=1) == "1.5 h"
+    assert ptd(0.5, precision=1) == "500.0 ms"
+    assert ptd(0.0005, precision=1) == "500.0 µs"
+    assert ptd(0.0000005, precision=1) == "500.0 ns"

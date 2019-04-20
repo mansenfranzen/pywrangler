@@ -62,7 +62,7 @@ def header(name: str, indent: int = 0, underline: str = "-") -> str:
     _indent = " " * indent
 
     _header = _indent + name
-    _underline = _indent + underline*len(name) + "\n"
+    _underline = _indent + underline * len(name) + "\n"
 
     return _join([_header, _underline])
 
@@ -111,8 +111,8 @@ def enumeration(values: ENUM, indent: int = 0, bullet_char: str = "-",
     return _join(indented)
 
 
-def sizeof(size: float, precision: int = 2, align: str = ">",
-           width=None) -> str:
+def pretty_file_size(size: float, precision: int = 2, align: str = ">",
+                     width: int = 0) -> str:
     """Helper function to format size in human readable format.
 
     Parameters
@@ -138,10 +138,6 @@ def sizeof(size: float, precision: int = 2, align: str = ">",
     """  # noqa: E501
 
     template = "{size:{align}{width}.{precision}f} {unit}B"
-
-    if width is None:
-        width = precision + 5
-
     kwargs = dict(width=width, precision=precision, align=align)
 
     # iterate units (multiples of 1024 bytes)
@@ -152,3 +148,47 @@ def sizeof(size: float, precision: int = 2, align: str = ">",
 
     else:
         return template.format(size=size, unit='Yi', **kwargs)
+
+
+def pretty_time_duration(seconds: float, precision: int = 1, align: str = ">",
+                         width: int = 0) -> str:
+    """Helper function to format time duration in human readable format.
+
+    Parameters
+    ----------
+    seconds: float
+        The size in seconds to be converted into human readable format.
+    precision: int, optional
+        Define shown precision.
+    align: {'<', '^', '>'}, optional
+        Format align specifier.
+    width: int
+        Define maximum width for number.
+
+    Returns
+    -------
+    human_fmt: str
+        Human readable representation of given `seconds`.
+
+    """
+
+    template = "{time_delta:{align}{width}.{precision}f} {unit}"
+
+    units = [('year', 60 * 60 * 24 * 365),
+             ('month', 60 * 60 * 24 * 30),
+             ('d', 60 * 60 * 24),
+             ('h', 60 * 60),
+             ('min', 60),
+             ('s', 1),
+             ('ms', 1e-3),
+             ('µs', 1e-6),
+             ('ns', 1e-9)]
+
+    for unit_name, unit_seconds in units:
+        if seconds > unit_seconds:
+            time_delta = seconds / unit_seconds
+            return template.format(time_delta=time_delta,
+                                   align=align,
+                                   width=width,
+                                   precision=precision,
+                                   unit=unit_name)
