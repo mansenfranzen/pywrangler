@@ -3,9 +3,8 @@ classes including wrangler descriptions and parameters.
 
 """
 
-import inspect
-
 from pywrangler.util import _pprint
+from pywrangler.util.helper import get_param_names
 
 
 class BaseWrangler:
@@ -60,11 +59,7 @@ class BaseWrangler:
 
         """
 
-        init = self.__class__.__init__
-        signature = inspect.signature(init)
-        parameters = signature.parameters.values()
-
-        param_names = [x.name for x in parameters if x.name != "self"]
+        param_names = get_param_names(self.__class__.__init__, ["self"])
         param_dict = {x: getattr(self, x) for x in param_names}
 
         return param_dict
