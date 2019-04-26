@@ -3,29 +3,20 @@
 """
 
 import gc
-import inspect
 import sys
 import timeit
-from typing import Any, Callable, Iterable, List, Union
+from typing import Callable, Iterable, List, Union
 
 import numpy as np
-import pandas as pd
 
 from pywrangler.exceptions import NotProfiledError
-from pywrangler.util import sanitizer
-from pywrangler.util._pprint import enumeration, header, sizeof
-from pywrangler.util.helper import cached_property
-from pywrangler.wranglers.base import BaseWrangler
-
-try:
-    from pyspark.sql import DataFrame as SparkDataFrame
-except ImportError:
-    SparkDataFrame = Any
-
-try:
-    from dask.dataframe import DataFrame as DaskDataFrame
-except ImportError:
-    DaskDataFrame = Any
+from pywrangler.util._pprint import (
+    enumeration,
+    header,
+    pretty_file_size,
+    pretty_time_duration
+)
+from pywrangler.util.helper import get_param_names
 
 
 def allocate_memory(size: float) -> np.ndarray:
@@ -57,51 +48,128 @@ def allocate_memory(size: float) -> np.ndarray:
 
 
 class BaseProfiler:
-    """Base class defining interface and common helper methods for memory and
-    time profiler.
+    """Base class defining the interface for all profilers.
 
-    By convention, the profiled object should always be the first argument
-    (ignoring self) passed to `__init__`.
-    All public profiling metrics have to should be defined as properties. All
-    private attributes need to start with an underscore.
+    Subclasses have to implement `profile` (the actual profiling
+    implementation) and `less_is_better` (defining the ranking of profiling
+    measurements).
+
+    Attributes
+    ----------
+    measurements: list
+        The actual profiling measurements.
+    best: float
+        The best measurement.
+    median: float
+        The median of measurements.
+    worst: float
+        The worst measurement.
+    std: float
+        The standard deviation of measurements.
+    runs: int
+        The number of measurements.
+
+    Methods
+    -------
+    profile
+        Contains the actual profiling implementation.
+    report
+        Print simple report consisting of best, median, worst, standard
+        deviation and the number of measurements.
+    profile_report
+        Calls profile and report in sequence.
 
     """
 
+    @property
+    def measurements(self) -> List[float]:
+        """Return measurements of profiling.
+
+        """
+
+        self._check_is_profiled(["_measurements"])
+
+        return self._measurements
+
+    @property
+    def best(self) -> float:
+        """Returns the best measurement.
+
+        """
+
+        if self.less_is_better:
+            return np.min(self.measurements)
+        else:
+            return np.max(self.measurements)
+
+    @property
+    def median(self) -> float:
+        """Returns the median of measurements.
+
+        """
+
+        return np.median(self.measurements)
+
+    @property
+    def worst(self) -> float:
+        """Returns the worst measurement.
+
+        """
+
+        if self.less_is_better:
+            return np.max(self.measurements)
+        else:
+            return np.min(self.measurements)
+
+    @property
+    def std(self) -> float:
+        """Returns the standard deviation of measurements.
+
+        """
+
+        return np.std(self.measurements)
+
+    @property
+    def runs(self) -> int:
+        """Return number of measurements.
+
+        """
+
+        return len(self.measurements)
+
+    @property
+    def less_is_better(self) -> bool:
+        """Defines ranking of measurements.
+
+        """
+
+        raise NotImplementedError
+
     def profile(self, *args, **kwargs):
-        """Contains the actual profiling implementation and should always
-        return self.
+        """Contains the actual profiling implementation and has to set
+        `self._measurements`. Always returns self.
 
         """
 
         raise NotImplementedError
 
     def report(self):
-        """Print simple report consisting of the name of the profiler class,
-        the name of the profiled object, and all defined metrics/properties.
+        """Print simple report consisting of best, median, worst, standard
+        deviation and the number of measurements.
 
         """
 
-        # get name of profiler
-        profiler_name = self.__class__.__name__
+        tpl = "{best} {sign} {median} {sign} {worst} ± {std} ({runs} runs)"
 
-        # get name of profiled object
-        parameters = inspect.signature(self.__init__).parameters.keys()
-        profiled_object = getattr(self, '_{}'.format(list(parameters)[0]))
+        fmt = self._pretty_formatter
+        values = {"best": fmt(self.best),
+                  "median": fmt(self.median),
+                  "worst": fmt(self.worst),
+                  "std": fmt(self.std),
+                  "runs": self.runs,
+                  "sign": "<" if self.less_is_better else ">"}
 
-        try:
-            profiled_obj_name = profiled_object.__name__
-        except AttributeError:
-            profiled_obj_name = profiled_object.__class__.__name__
-
-        # get relevant metrics
-        ignore = ('profile', 'report', 'profile_report')
-        metric_names = [x for x in dir(self)
-                        if not x.startswith('_')
-                        and x not in ignore]
-        metric_values = {x: getattr(self, x) for x in metric_names}
-
-        print(header('{}: {}'.format(profiler_name, profiled_obj_name)), '\n',
-              enumeration(metric_values), sep='')
+        print(tpl.format(**values))
 
     def profile_report(self, *args, **kwargs):
         """Calls profile and report in sequence.
@@ -109,6 +177,25 @@ class BaseProfiler:
         """
 
         self.profile(*args, **kwargs).report()
+
+    def _pretty_formatter(self, value: float) -> str:
+        """String formatter for human readable output of given input `value`.
+        Should be replaced with sensible formatters for file size or time
+        duration.
+
+        Parameters
+        ----------
+        value: float
+            Numeric value to be formatted.
+
+        Returns
+        -------
+        pretty_string: str
+            Human readable representation of `value`.
+
+        """
+
+        return str(value)
 
     def _check_is_profiled(self, attributes: Iterable[str]) -> None:
         """Check if `profile` was already called by ensuring passed attributes
@@ -133,12 +220,185 @@ class BaseProfiler:
 
         """
 
-        if any([getattr(self, x) is None for x in attributes]):
+        if any([getattr(self, x, None) is None for x in attributes]):
             msg = ("This {}'s instance is not profiled yet. Call 'profile' "
                    "with appropriate arguments before using this method."
                    .format(self.__class__.__name__))
 
             raise NotProfiledError(msg)
+
+    def __repr__(self):
+        """Print representation of profiler instance.
+
+        """
+
+        # get name of profiler
+        profiler_name = self.__class__.__name__
+
+        # get parameter names
+        param_names = get_param_names(self.__class__.__init__, ["self"])
+        param_dict = {x: getattr(self, x) for x in param_names}
+
+        return header(profiler_name) + enumeration(param_dict)
+
+
+class MemoryProfiler(BaseProfiler):
+    """Approximate the increase in memory usage when calling a given function.
+    Memory increase is defined as the difference between the maximum memory
+    usage during function execution and the baseline memory usage before
+    function execution.
+
+    Note, memory consumption of child processes are included.
+
+    In addition, compute the mean increase in baseline memory usage between
+    repetitions which might indicate memory leakage.
+
+    Parameters
+    ----------
+    func: callable
+        Callable object to be memory profiled.
+    repetitions: int, optional
+        Number of repetitions.
+    interval: float, optional
+        Defines interval duration between consecutive memory usage
+        measurements in seconds.
+
+    Attributes
+    ----------
+    measurements: list
+        The actual profiling measurements in bytes.
+    best: float
+        The best measurement in bytes.
+    median: float
+        The median of measurements in bytes.
+    worst: float
+        The worst measurement in bytes.
+    std: float
+        The standard deviation of measurements in bytes.
+    runs: int
+        The number of measurements.
+    baseline_change: float
+        The median change in baseline memory usage across all runs in bytes.
+
+    Methods
+    -------
+    profile
+        Contains the actual profiling implementation.
+    report
+        Print simple report consisting of best, median, worst, standard
+        deviation and the number of measurements.
+    profile_report
+        Calls profile and report in sequence.
+
+    Notes
+    -----
+    The implementation is based on `memory_profiler` and is inspired by the
+    IPython `%memit` magic which additionally calls `gc.collect()` before
+    executing the function to get more stable results.
+
+    """
+
+    def __init__(self, func: Callable, repetitions: int = 5,
+                 interval: float = 0.01):
+        self.func = func
+        self.repetitions = repetitions
+        self.interval = interval
+
+    def profile(self, *args, **kwargs):
+        """Executes the actual memory profiling.
+
+        Parameters
+        ----------
+        args: iterable, optional
+            Optional positional arguments passed to `func`.
+        kwargs: mapping, optional
+            Optional keyword arguments passed to `func`.
+
+        """
+
+        from memory_profiler import memory_usage
+
+        counter = 0
+        baselines = []
+        max_usages = []
+
+        func_args = (self.func, args, kwargs)
+        mem_args = dict(interval=self.interval,
+                        multiprocess=True,
+                        max_usage=True)
+
+        while counter < self.repetitions:
+            gc.collect()
+            baseline = memory_usage(**mem_args)
+            max_usage = memory_usage(func_args, **mem_args)
+
+            baselines.append(self._mb_to_bytes(baseline))
+            max_usages.append(self._mb_to_bytes(max_usage[0]))
+            counter += 1
+
+        self._max_usages = max_usages
+        self._baselines = baselines
+        self._measurements = np.subtract(max_usages, baselines).tolist()
+
+        return self
+
+    @property
+    def less_is_better(self) -> bool:
+        """Less memory consumption is better.
+
+        """
+
+        return True
+
+    @property
+    def max_usages(self) -> List[int]:
+        """Returns the absolute, maximum memory usages for each run in
+        bytes.
+
+        """
+
+        self._check_is_profiled(['_max_usages'])
+
+        return self._max_usages
+
+    @property
+    def baselines(self) -> List[int]:
+        """Returns the absolute, baseline memory usages for each run in
+        bytes. The baseline memory usage is defined as the memory usage before
+        function execution.
+
+        """
+
+        self._check_is_profiled(['_baselines'])
+
+        return self._baselines
+
+    @property
+    def baseline_change(self) -> float:
+        """Returns the median change in baseline memory usage across all
+        run. The baseline memory usage is defined as the memory usage
+        before function execution.
+        """
+
+        changes = np.diff(self.baselines)
+        return float(np.median(changes))
+
+    def _pretty_formatter(self, value: float) -> str:
+        """String formatter for human readable output of given input `value`.
+
+        Parameters
+        ----------
+        value: float
+            Numeric value to be formatted.
+
+        Returns
+        -------
+        pretty_string: str
+            Human readable representation of `value`.
+
+        """
+
+        return pretty_file_size(value)
 
     @staticmethod
     def _mb_to_bytes(size_mib: float) -> int:
@@ -159,139 +419,6 @@ class BaseProfiler:
         return int(size_mib * (2 ** 20))
 
 
-class MemoryProfiler(BaseProfiler):
-    """Approximate the increase in memory usage when calling a given function.
-    Memory increase is defined as the difference between the maximum memory
-    usage during function execution and the baseline memory usage before
-    function execution.
-
-    In addition, compute the mean increase in baseline memory usage between
-    repetitions which might indicate memory leakage.
-
-    Parameters
-    ----------
-    func: callable
-        Callable object to be memory profiled.
-    repetitions: int, optional
-        Number of repetitions.
-    interval: float, optional
-        Defines interval duration between consecutive memory usage
-        measurements in seconds.
-
-    Notes
-    -----
-    The implementation is based on `memory_profiler` and is inspired by the
-    IPython `%memit` magic which additionally calls `gc.collect()` before
-    executing the function to get more stable results.
-
-    """
-
-    def __init__(self, func, repetitions: int = 5, interval: float = 0.01):
-        self._func = func
-        self._repetitions = repetitions
-        self._interval = interval
-
-        self._max_usages = None
-        self._baselines = None
-
-    def profile(self, *args, **kwargs):
-        """Executes the actual memory profiling.
-
-        Parameters
-        ----------
-        args: iterable, optional
-            Optional positional arguments passed to `func`.
-        kwargs: mapping, optional
-            Optional keyword arguments passed to `func`.
-
-        """
-
-        from memory_profiler import memory_usage
-
-        counter = 0
-        baselines = []
-        max_usages = []
-        mem_args = (self._func, args, kwargs)
-
-        while counter < self._repetitions:
-            gc.collect()
-            baseline = memory_usage()[0]
-            max_usage = memory_usage(mem_args,
-                                     interval=self._interval,
-                                     max_usage=True)
-
-            baselines.append(self._mb_to_bytes(baseline))
-            max_usages.append(self._mb_to_bytes(max_usage[0]))
-            counter += 1
-
-        self._max_usages = max_usages
-        self._baselines = baselines
-
-        return self
-
-    @property
-    def max_usages(self) -> List[int]:
-        """Returns the absolute, maximum memory usages for each iteration in
-        bytes.
-
-        """
-
-        self._check_is_profiled(['_max_usages'])
-
-        return self._max_usages
-
-    @property
-    def baselines(self) -> List[int]:
-        """Returns the absolute, baseline memory usages for each iteration in
-        bytes. The baseline memory usage is defined as the memory usage before
-        function execution.
-
-        """
-
-        self._check_is_profiled(['_baselines'])
-
-        return self._baselines
-
-    @property
-    def increases(self) -> List[int]:
-        """Returns the absolute memory increase for each iteration in bytes.
-        The memory increase is defined as the difference between the maximum
-        memory usage during function execution and the baseline memory usage
-        before function execution.
-
-        """
-
-        return np.subtract(self.max_usages, self.baselines).tolist()
-
-    @property
-    def increases_mean(self) -> float:
-        """Returns the mean of the absolute memory increases across all
-        iterations.
-
-        """
-
-        return float(np.mean(self.increases))
-
-    @property
-    def increases_std(self) -> float:
-        """Returns the standard variation of the absolute memory increases
-        across all iterations.
-
-        """
-
-        return float(np.std(self.increases))
-
-    @property
-    def baseline_change(self) -> float:
-        """Returns the mean change in baseline memory usage across all
-        all iterations. The baseline memory usage is defined as the memory
-        usage before function execution.
-        """
-
-        changes = np.diff(self.baselines)
-        return float(np.mean(changes))
-
-
 class TimeProfiler(BaseProfiler):
     """Approximate the time required to execute a function call.
 
@@ -307,16 +434,28 @@ class TimeProfiler(BaseProfiler):
 
     Attributes
     ----------
-    timings: list
-        The timing measurements in seconds.
+    measurements: list
+        The actual profiling measurements in seconds.
+    best: float
+        The best measurement in seconds.
     median: float
-        The median of the timing measurements in seconds.
-    standard_deviation: float
-        The standard deviation of the timing measurements in seconds.
-    fastast: float
-        The fastest value of the timing measurements in seconds.
-    repetitions: int
+        The median of measurements in seconds.
+    worst: float
+        The worst measurement in seconds.
+    std: float
+        The standard deviation of measurements in seconds.
+    runs: int
         The number of measurements.
+
+    Methods
+    -------
+    profile
+        Contains the actual profiling implementation.
+    report
+        Print simple report consisting of best, median, worst, standard
+        deviation and the number of measurements.
+    profile_report
+        Calls profile and report in sequence.
 
     Notes
     -----
@@ -325,13 +464,8 @@ class TimeProfiler(BaseProfiler):
     """
 
     def __init__(self, func: Callable, repetitions: Union[None, int] = None):
-        self._func = func
-        self._repetitions = repetitions
-
-        self._timings = None
-        self._timings_mean = None
-        self._timings_std = None
-        self._fastest = None
+        self.func = func
+        self.repetitions = repetitions
 
     def profile(self, *args, **kwargs):
         """Executes the actual time profiling.
@@ -351,431 +485,40 @@ class TimeProfiler(BaseProfiler):
 
             """
 
-            self._func(*args, **kwargs)
+            self.func(*args, **kwargs)
 
         timer = timeit.Timer(stmt=wrapper)
 
-        if self._repetitions is None:
+        if self.repetitions is None:
             repeat, _ = timer.autorange(None)
         else:
-            repeat = self._repetitions
+            repeat = self.repetitions
 
-        self._timings = timer.repeat(number=1, repeat=repeat)
-
-        return self
-
-    @property
-    def timings(self) -> List[float]:
-        """Returns the timeit measurements in seconds.
-
-        """
-
-        return self._timings
-
-    @property
-    def median(self) -> float:
-        """Returns the median of all timeit measurements in seconds.
-
-        """
-
-        self._check_is_profiled(['_timings'])
-
-        return float(np.median(self._timings))
-
-    @property
-    def standard_deviation(self) -> float:
-        """Returns the standard deviation of all timeit measurements in
-        seconds.
-
-        """
-
-        self._check_is_profiled(['_timings'])
-
-        return float(np.std(self._timings))
-
-    @property
-    def fastest(self) -> float:
-        """Returns the fastest timing measurement in seconds.
-
-        """
-
-        self._check_is_profiled(['_timings'])
-
-        return min(self._timings)
-
-    @property
-    def repetitions(self) -> int:
-        """Returns the number of measurements.
-
-        """
-
-        return len(self._timings)
-
-    def report(self):
-        """Profile time via `profile` and provide human readable report.
-
-        Returns
-        -------
-        None. Prints report to stdout.
-
-        """
-
-        enum_kwargs = dict(align_width=15, bullet_char="")
-
-        # string part for header
-        wrangler_name = self._wrangler.__class__.__name__
-        str_header = header("{} - time profiling".format(wrangler_name))
-
-        # string part for values
-        dict_values = {"Fastest": "{:.2f}s".format(self.fastest),
-                       "Median": "{:.2f}s".format(self.median),
-                       "Std": "{:.2f}s".format(self.standard_deviation),
-                       "Repetitions": self.repetitions}
-
-        str_values = enumeration(dict_values, **enum_kwargs)
-
-        # build complete string and print
-        template = "{}\n{}\n"
-        report_string = template.format(str_header, str_values)
-
-        print(report_string)
-
-
-class PandasTimeProfiler(TimeProfiler):
-    """Approximate time that a pandas wrangler instance requires to execute the
-    `fit_transform` step.
-
-    Parameters
-    ----------
-    wrangler: pywrangler.wranglers.base.BaseWrangler
-         The wrangler instance to be profiled.
-    repetitions: None, int, optional
-        Number of repetitions. If `None`, `timeit.Timer.autorange` will
-        determine a sensible default.
-
-    Attributes
-    ----------
-    timings: list
-        The timing measurements in seconds.
-    median: float
-        The median of the timing measurements in seconds.
-    standard_deviation: float
-        The standard deviation of the timing measurements in seconds.
-    fastast: float
-        The fastest value of the timing measurements in seconds.
-    repetitions: int
-        The number of measurements.
-
-    """
-
-    def __init__(self, wrangler: BaseWrangler,
-                 repetitions: Union[None, int] = None):
-        self._wrangler = wrangler
-        super().__init__(wrangler.fit_transform, repetitions)
-
-
-class PandasMemoryProfiler(MemoryProfiler):
-    """Approximate memory usage that a pandas wrangler instance requires to
-    execute the `fit_transform` step.
-
-    As a key metric, `ratio` is computed. It refers to the amount of
-    memory which is required to execute the `fit_transform` step. More
-    concretely, it estimates how much more memory is used standardized by the
-    input memory usage (memory usage increase during function execution divided
-    by memory usage of input dataframes). In other words, if you have a 1GB
-    input dataframe, and the `usage_ratio` is 5, `fit_transform` needs 5GB free
-    memory available to succeed. A `usage_ratio` of 0.5 given a 2GB input
-    dataframe would require 1GB free memory available for computation.
-
-    Parameters
-    ----------
-    wrangler: pywrangler.wranglers.pandas.base.PandasWrangler
-        The wrangler instance to be profiled.
-    repetitions: int
-        The number of measurements for memory profiling.
-    interval: float, optional
-        Defines interval duration between consecutive memory usage
-        measurements in seconds.
-
-    Attributes
-    ----------
-    increases_mean: float
-        The mean of the absolute memory increases across all iterations in
-        bytes.
-    input: int
-        Memory usage of input dataframes in bytes.
-    output: int
-        Memory usage of output dataframes in bytes.
-    ratio: float
-        The amount of memory required for computation in units of input
-        memory usage.
-
-    """
-
-    def __init__(self, wrangler: BaseWrangler, repetitions: int = 5,
-                 interval: float = 0.01):
-        self._wrangler = wrangler
-
-        self._usage_input = None
-        self._usage_output = None
-
-        super().__init__(wrangler.fit_transform, repetitions, interval)
-
-    def profile(self, *dfs: pd.DataFrame, **kwargs):
-        """Profiles the actual memory usage given input dataframes `dfs`
-        which are passed to `fit_transform`.
-
-        """
-
-        # usage input
-        self._usage_input = self._memory_usage_dfs(*dfs)
-
-        # usage output
-        dfs_output = self._wrangler.fit_transform(*dfs)
-        dfs_output = sanitizer.ensure_tuple(dfs_output)
-        self._usage_output = self._memory_usage_dfs(*dfs_output)
-
-        # usage during fit_transform
-        super().profile(*dfs, **kwargs)
+        self._measurements = timer.repeat(number=1, repeat=repeat)
 
         return self
 
     @property
-    def input(self) -> float:
-        """Returns the memory usage of the input dataframes in bytes.
+    def less_is_better(self) -> bool:
+        """Less time required is better.
 
         """
 
-        self._check_is_profiled(['_usage_input'])
-        return self._usage_input
+        return True
 
-    @property
-    def output(self) -> float:
-        """Returns the memory usage of the output dataframes in bytes.
-
-        """
-
-        self._check_is_profiled(['_usage_output'])
-        return self._usage_output
-
-    @cached_property
-    def ratio(self) -> float:
-        """Refers to the amount of memory which is required to execute the
-        `fit_transform` step. More concretely, it estimates how much more
-        memory is used standardized by the input memory usage (memory usage
-        increase during function execution divided by memory usage of input
-        dataframes). In other words, if you have a 1GB input dataframe, and the
-        `usage_ratio` is 5, `fit_transform` needs 5GB free memory available to
-        succeed. A `usage_ratio` of 0.5 given a 2GB input dataframe would
-        require 1GB free memory available for computation.
-
-        """
-
-        return self.increases_mean / self.input
-
-    def report(self):
-        """Profile memory usage via `profile` and provide human readable
-        report including memory usage of input and output dataframes, memory
-        usage during `fit_transform`, the usage ratio and shows if
-        the wrangler may have side effects in regard to memory consumption via
-        the change in baseline memory usage.
-
-        Returns
-        -------
-        None. Prints report to stdout.
-
-        """
-
-        enum_kwargs = dict(align_width=15, bullet_char="")
-
-        # string part for header
-        wrangler_name = self._wrangler.__class__.__name__
-        str_header = header("{} - memory usage".format(wrangler_name))
-
-        # string part for input and output dfs
-        dict_dfs = {"Input dfs": sizeof(self.input),
-                    "Ouput dfs": sizeof(self.output)}
-
-        str_dfs = enumeration(dict_dfs, **enum_kwargs)
-
-        # string part for transform/fit and ratio
-        str_inc = sizeof(self.increases_mean)
-        str_std = sizeof(self.increases_std, width=0)
-        str_inc += " (Std: {})".format(str_std)
-        str_ratio = "{:>7.2f}".format(self.ratio)
-        str_baseline_change = sizeof(self.baseline_change)
-        dict_inc = {"Fit/Transform": str_inc,
-                    "Ratio": str_ratio,
-                    "Baseline change": str_baseline_change}
-
-        str_inc = enumeration(dict_inc, **enum_kwargs)
-
-        # build complete string and print
-        template = "{}\n{}\n\n{}"
-        report_string = template.format(str_header, str_dfs, str_inc)
-
-        print(report_string)
-
-    @staticmethod
-    def _memory_usage_dfs(*dfs: pd.DataFrame) -> int:
-        """Return memory usage in bytes for all given dataframes.
+    def _pretty_formatter(self, value: float) -> str:
+        """String formatter for human readable output of given input `value`.
 
         Parameters
         ----------
-        dfs: pd.DataFrame
-            The pandas dataframes for which memory usage should be computed.
+        value: float
+            Numeric value to be formatted.
 
         Returns
         -------
-        memory_usage: int
-            The computed memory usage in bytes.
+        pretty_string: str
+            Human readable representation of `value`.
 
         """
 
-        mem_usages = [df.memory_usage(deep=True, index=True).sum()
-                      for df in dfs]
-
-        return int(np.sum(mem_usages))
-
-
-class SparkTimeProfiler(TimeProfiler):
-    """Approximate time that a spark wrangler instance requires to execute the
-    `fit_transform` step.
-
-    Please note, input dataframes are cached before timing execution to ensure
-    timing measurements only capture wrangler's `fit_transform`. This may cause
-    problems if the size of input dataframes exceeds available memory.
-
-    Parameters
-    ----------
-    wrangler: pywrangler.wranglers.base.BaseWrangler
-         The wrangler instance to be profiled.
-    repetitions: None, int, optional
-        Number of repetitions. If `None`, `timeit.Timer.autorange` will
-        determine a sensible default.
-
-    Attributes
-    ----------
-    timings: list
-        The timing measurements in seconds.
-    median: float
-        The median of the timing measurements in seconds.
-    standard_deviation: float
-        The standard deviation of the timing measurements in seconds.
-    fastast: float
-        The fastest value of the timing measurements in seconds.
-    repetitions: int
-        The number of measurements.
-
-    """
-
-    def __init__(self, wrangler: BaseWrangler,
-                 repetitions: Union[None, int] = None):
-        self._wrangler = wrangler
-
-        def wrapper(*args, **kwargs):
-            """Wrapper function to call `count()` to enforce computation.
-
-            """
-
-            wrangler.fit_transform(*args, **kwargs).count()
-
-        super().__init__(wrapper, repetitions)
-
-    def profile(self, *dfs: SparkDataFrame, **kwargs):
-        """Profiles timing given input dataframes `dfs` which are passed to
-        `fit_transform`.
-
-        Please note, input dataframes are cached before timing execution to
-        ensure timing measurements only capture wrangler's `fit_transform`.
-        This may cause problems if the size of input dataframes exceeds
-        available memory.
-
-        """
-
-        # cache input dataframes
-        dfs_cached = [df.cache() for df in dfs]
-
-        # enforce caching calling count() action
-        for df in dfs_cached:
-            df.count()
-
-        super().profile(*dfs_cached, **kwargs)
-
-        # clear caches
-        for df in dfs_cached:
-            df.unpersist()
-            del df
-
-        del dfs_cached
-
-        return self
-
-
-class DaskTimeProfiler(TimeProfiler):
-    """Approximate time that a dask wrangler instance requires to execute the
-    `fit_transform` step.
-
-    Please note, input dataframes are cached before timing execution to ensure
-    timing measurements only capture wrangler's `fit_transform`. This may cause
-    problems if the size of input dataframes exceeds available memory.
-
-    Parameters
-    ----------
-    wrangler: pywrangler.wranglers.base.BaseWrangler
-         The wrangler instance to be profiled.
-    repetitions: None, int, optional
-        Number of repetitions. If `None`, `timeit.Timer.autorange` will
-        determine a sensible default.
-
-    Attributes
-    ----------
-    timings: list
-        The timing measurements in seconds.
-    median: float
-        The median of the timing measurements in seconds.
-    standard_deviation: float
-        The standard deviation of the timing measurements in seconds.
-    fastast: float
-        The fastest value of the timing measurements in seconds.
-    repetitions: int
-        The number of measurements.
-
-    """
-
-    def __init__(self, wrangler: BaseWrangler,
-                 repetitions: Union[None, int] = None):
-        self._wrangler = wrangler
-
-        def wrapper(*args, **kwargs):
-            """Wrapper function to call `compute()` to enforce computation.
-
-            """
-
-            wrangler.fit_transform(*args, **kwargs).compute()
-
-        super().__init__(wrapper, repetitions)
-
-    def profile(self, *dfs: DaskDataFrame, **kwargs):
-        """Profiles timing given input dataframes `dfs` which are passed to
-        `fit_transform`.
-
-        Please note, input dataframes are cached before timing execution to
-        ensure timing measurements only capture wrangler's `fit_transform`.
-        This may cause problems if the size of input dataframes exceeds
-        available memory.
-
-        """
-
-        # cache input dataframes
-        dfs_cached = [df.persist() for df in dfs]
-
-        super().profile(*dfs_cached, **kwargs)
-
-        # clear caches
-        for df in dfs_cached:
-            del df
-
-        del dfs_cached
-
-        return self
+        return pretty_time_duration(value)

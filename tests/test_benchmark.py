@@ -7,33 +7,23 @@ import time
 
 import pytest
 
-import numpy as np
-import pandas as pd
-
 from pywrangler.benchmark import (
     BaseProfiler,
-    DaskTimeProfiler,
     MemoryProfiler,
-    PandasMemoryProfiler,
-    PandasTimeProfiler,
-    SparkTimeProfiler,
     TimeProfiler,
     allocate_memory
 )
 from pywrangler.exceptions import NotProfiledError
-from pywrangler.wranglers.pandas.base import PandasSingleNoFit
-
-try:
-    from pywrangler.wranglers.spark.base import SparkSingleNoFit
-except ImportError:
-    SparkSingleNoFit = None
-
-try:
-    from pywrangler.wranglers.dask.base import DaskSingleNoFit
-except ImportError:
-    DaskSingleNoFit = None
 
 MIB = 2 ** 20
+
+
+@pytest.fixture()
+def func_no_effect():
+    def func():
+        pass
+
+    return func
 
 
 def test_allocate_memory_empty():
@@ -51,7 +41,7 @@ def test_allocate_memory_5mb():
 def test_base_profiler_not_implemented():
     base_profiler = BaseProfiler()
 
-    for will_raise in ('profile', 'profile_report'):
+    for will_raise in ('profile', 'profile_report', 'less_is_better'):
         with pytest.raises(NotImplementedError):
             getattr(base_profiler, will_raise)()
 
@@ -67,42 +57,101 @@ def test_base_profiler_check_is_profiled():
     base_profiler._check_is_profiled(['_is_set'])
 
 
-def test_base_profiler_mb_to_bytes():
-    assert BaseProfiler._mb_to_bytes(1) == 1048576
-    assert BaseProfiler._mb_to_bytes(1.5) == 1572864
-    assert BaseProfiler._mb_to_bytes(0.33) == 346030
+def test_base_profiler_measurements_less_is_better(capfd):
+    measurements = range(7)
+
+    class Profiler(BaseProfiler):
+
+        @property
+        def less_is_better(self):
+            return True
+
+        def profile(self, *args, **kwargs):
+            self._measurements = measurements
+            return self
+
+        def _pretty_formatter(self, value):
+            return "{:.0f}".format(value)
+
+    base_profiler = Profiler()
+    base_profiler.profile_report()
+
+    assert base_profiler.median == 3
+    assert base_profiler.best == 0
+    assert base_profiler.worst == 6
+    assert base_profiler.std == 2
+    assert base_profiler.runs == 7
+    assert base_profiler.measurements == measurements
+
+    out, _ = capfd.readouterr()
+    assert out == "0 < 3 < 6 ± 2 (7 runs)\n"
 
 
-def test_memory_profiler_return_self():
-    def dummy():
-        pass
+def test_base_profiler_measurements_more_is_better(capfd):
+    measurements = range(7)
 
-    memory_profiler = MemoryProfiler(dummy)
+    class Profiler(BaseProfiler):
+        @property
+        def less_is_better(self):
+            return False
+
+        def profile(self, *args, **kwargs):
+            self._measurements = measurements
+            return self
+
+        def _pretty_formatter(self, value):
+            return "{:.0f}".format(value)
+
+    base_profiler = Profiler()
+    base_profiler.profile_report()
+
+    assert base_profiler.median == 3
+    assert base_profiler.best == 6
+    assert base_profiler.worst == 0
+    assert base_profiler.std == 2
+    assert base_profiler.runs == 7
+    assert base_profiler.measurements == measurements
+
+    out, _ = capfd.readouterr()
+    assert out == "6 > 3 > 0 ± 2 (7 runs)\n"
+
+
+def test_memory_profiler_mb_to_bytes():
+    assert MemoryProfiler._mb_to_bytes(1) == 1048576
+    assert MemoryProfiler._mb_to_bytes(1.5) == 1572864
+    assert MemoryProfiler._mb_to_bytes(0.33) == 346030
+
+
+def test_memory_profiler_return_self(func_no_effect):
+    memory_profiler = MemoryProfiler(func_no_effect)
     assert memory_profiler.profile() is memory_profiler
 
 
-def test_memory_profiler_properties():
-    def dummy():
-        pass
+def test_memory_profiler_measurements(func_no_effect):
+    baselines = [0, 1, 2, 3]
+    max_usages = [4, 5, 7, 8]
+    measurements = [4, 4, 5, 5]
 
-    memory_profiler = MemoryProfiler(dummy)
-    memory_profiler._baselines = [0, 1, 2, 3]
-    memory_profiler._max_usages = [4, 5, 7, 8]
+    memory_profiler = MemoryProfiler(func_no_effect)
+    memory_profiler._baselines = baselines
+    memory_profiler._max_usages = max_usages
+    memory_profiler._measurements = measurements
 
-    assert memory_profiler.max_usages == memory_profiler._max_usages
-    assert memory_profiler.baselines == memory_profiler._baselines
-    assert memory_profiler.increases == [4, 4, 5, 5]
-    assert memory_profiler.increases_mean == 4.5
-    assert memory_profiler.increases_std == 0.5
+    assert memory_profiler.less_is_better is True
+    assert memory_profiler.max_usages == max_usages
+    assert memory_profiler.baselines == baselines
+    assert memory_profiler.measurements == measurements
+    assert memory_profiler.median == 4.5
+    assert memory_profiler.std == 0.5
+    assert memory_profiler.best == 4
+    assert memory_profiler.worst == 5
     assert memory_profiler.baseline_change == 1
 
 
-def test_memory_profiler_no_side_effect():
-    def no_side_effect():
-        dummy = 5
-        return dummy
+def test_memory_profiler_no_side_effect(func_no_effect):
+    baseline_change = MemoryProfiler(func_no_effect).profile().baseline_change
 
-    assert MemoryProfiler(no_side_effect).profile().baseline_change < 0.5 * MIB
+    assert baseline_change < 0.5 * MIB
 
 
 def test_memory_profiler_side_effect():
@@ -117,12 +166,11 @@ def test_memory_profiler_side_effect():
     assert MemoryProfiler(side_effect).profile().baseline_change > 4.9 * MIB
 
 
-def test_memory_profiler_no_increase():
-    def no_increase():
-        pass
+def test_memory_profiler_no_increase(func_no_effect):
+    memory_profiler = MemoryProfiler(func_no_effect).profile()
+    print(memory_profiler.measurements)
 
-    assert MemoryProfiler(no_increase).profile().increases_mean < 0.1 * MIB
-    assert MemoryProfiler(no_increase).profile().increases_std < 0.1 * MIB
+    assert memory_profiler.median < MIB
 
 
 def test_memory_profiler_increase():
@@ -130,106 +178,34 @@ def test_memory_profiler_increase():
         memory_holder = allocate_memory(30)
         return memory_holder
 
-    assert MemoryProfiler(increase).profile().increases_mean > 29 * MIB
+    assert MemoryProfiler(increase).profile().median > 29 * MIB
 
 
-def test_pandas_memory_profiler_memory_usage_dfs():
-    df1 = pd.DataFrame(np.random.rand(10))
-    df2 = pd.DataFrame(np.random.rand(10))
-
-    test_input = [df1, df2]
-    test_output = int(df1.memory_usage(index=True, deep=True).sum() +
-                      df2.memory_usage(index=True, deep=True).sum())
-
-    assert PandasMemoryProfiler._memory_usage_dfs(*test_input) == test_output
-
-
-def test_pandas_memory_profiler_return_self():
-    class DummyWrangler(PandasSingleNoFit):
-        def transform(self, df):
-            return pd.DataFrame()
-
-    memory_profiler = PandasMemoryProfiler(DummyWrangler())
-
-    assert memory_profiler is memory_profiler.profile(pd.DataFrame())
-
-
-def test_pandas_memory_profiler_usage_increases_mean():
-    empty_df = pd.DataFrame()
-
-    class DummyWrangler(PandasSingleNoFit):
-        def transform(self, df):
-            return pd.DataFrame(allocate_memory(30))
-
-    memory_profiler = PandasMemoryProfiler(DummyWrangler())
-
-    assert memory_profiler.profile(empty_df).increases_mean > 29 * MIB
-
-
-def test_pandas_memory_profiler_usage_input_output():
-    df_input = pd.DataFrame(np.random.rand(1000))
-    df_output = pd.DataFrame(np.random.rand(10000))
-
-    test_df_input = df_input.memory_usage(index=True, deep=True).sum()
-    test_df_output = df_output.memory_usage(index=True, deep=True).sum()
-
-    class DummyWrangler(PandasSingleNoFit):
-        def transform(self, df):
-            return df_output
-
-    memory_profiler = PandasMemoryProfiler(DummyWrangler()).profile(df_input)
-
-    assert memory_profiler.input == test_df_input
-    assert memory_profiler.output == test_df_output
-
-
-def test_pandas_memory_profiler_usage_ratio():
-    usage_mib = 30
-    df_input = pd.DataFrame(np.random.rand(1000000))
-    usage_input = df_input.memory_usage(index=True, deep=True).sum()
-    test_output = ((usage_mib - 1) * MIB) / usage_input
-
-    class DummyWrangler(PandasSingleNoFit):
-        def transform(self, df):
-            return pd.DataFrame(allocate_memory(usage_mib))
-
-    memory_profiler = PandasMemoryProfiler(DummyWrangler())
-
-    assert memory_profiler.profile(df_input).ratio > test_output
-
-
-def test_time_profiler_return_self():
-    def dummy():
-        pass
-
-    time_profiler = TimeProfiler(dummy, 1)
+def test_time_profiler_return_self(func_no_effect):
+    time_profiler = TimeProfiler(func_no_effect, 1)
     assert time_profiler.profile() is time_profiler
 
 
-def test_time_profiler_properties():
-    def dummy():
-        pass
+def test_time_profiler_measurements(func_no_effect):
+    measurements = [1, 1, 3, 3]
 
-    time_profiler = TimeProfiler(dummy)
-    time_profiler._timings = [1, 1, 3, 3]
+    time_profiler = TimeProfiler(func_no_effect)
+    time_profiler._measurements = [1, 1, 3, 3]
 
+    assert time_profiler.less_is_better is True
     assert time_profiler.median == 2
-    assert time_profiler.standard_deviation == 1
-    assert time_profiler.fastest == 1
-    assert time_profiler.repetitions == 4
-    assert time_profiler.timings == time_profiler._timings
+    assert time_profiler.std == 1
+    assert time_profiler.best == 1
+    assert time_profiler.runs == 4
+    assert time_profiler.measurements == measurements
 
 
-def test_time_profiler_repetitions():
-    def dummy():
-        pass
-
-    time_profiler = TimeProfiler(dummy, repetitions=10).profile()
-
+def test_time_profiler_repetitions(func_no_effect):
+    time_profiler = TimeProfiler(func_no_effect, repetitions=10)
     assert time_profiler.repetitions == 10
 
 
-def test_time_profiler_fastest():
+def test_time_profiler_best():
     sleep = 0.0001
 
     def dummy():
@@ -238,85 +214,4 @@ def test_time_profiler_fastest():
 
     time_profiler = TimeProfiler(dummy, repetitions=1).profile()
 
-    assert time_profiler.fastest >= sleep
-
-
-def test_pandas_time_profiler_fastest():
-    """Basic test for pandas time profiler ensuring fastest timing is slower
-    than forced sleep.
-
-    """
-
-    sleep = 0.0001
-    df_input = pd.DataFrame()
-
-    class DummyWrangler(PandasSingleNoFit):
-        def transform(self, df):
-            time.sleep(sleep)
-            return df
-
-    time_profiler = PandasTimeProfiler(DummyWrangler(), 1).profile(df_input)
-
-    assert time_profiler.fastest >= sleep
-
-
-@pytest.mark.pyspark
-def test_spark_time_profiler_fastest(spark):
-    """Basic test for spark time profiler ensuring fastest timing is slower
-    than forced sleep.
-
-    """
-
-    sleep = 0.0001
-    df_input = spark.range(10).toDF("col")
-
-    class DummyWrangler(SparkSingleNoFit):
-        def transform(self, df):
-            time.sleep(sleep)
-            return df
-
-    time_profiler = SparkTimeProfiler(DummyWrangler(), 1).profile(df_input)
-
-    assert time_profiler.fastest >= sleep
-
-
-@pytest.mark.pyspark
-def test_spark_time_profiler_no_caching(spark):
-    """Pyspark input dataframes are cached during time profiling. Ensure input
-    dataframes are released from caching after profiling.
-
-    """
-
-    sleep = 0.0001
-    df_input = spark.range(10).toDF("col")
-
-    class DummyWrangler(SparkSingleNoFit):
-        def transform(self, df):
-            time.sleep(sleep)
-            return df
-
-    SparkTimeProfiler(DummyWrangler(), 1).profile(df_input)
-
-    assert df_input.is_cached is False
-
-
-@pytest.mark.dask
-def test_dask_time_profiler_fastest(spark):
-    """Basic test for dask time profiler ensuring fastest timing is slower
-    than forced sleep.
-
-    """
-
-    from dask import dataframe as dd
-
-    sleep = 0.0001
-    df_input = dd.from_pandas(pd.DataFrame(np.random.rand(10, 10)), 2)
-
-    class DummyWrangler(DaskSingleNoFit):
-        def transform(self, df):
-            time.sleep(sleep)
-            return df
-
-    time_profiler = DaskTimeProfiler(DummyWrangler(), 1).profile(df_input)
-
-    assert time_profiler.fastest >= sleep
+    assert time_profiler.best >= sleep
