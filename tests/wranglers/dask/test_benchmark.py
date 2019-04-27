@@ -30,7 +30,7 @@ def wrangler_sleeps():
     return DummyWrangler
 
 
-def test_dask_time_profiler_fastest(spark, wrangler_sleeps):
+def test_dask_time_profiler_fastest(wrangler_sleeps):
     """Basic test for dask time profiler ensuring fastest timing is slower
     than forced sleep.
 
