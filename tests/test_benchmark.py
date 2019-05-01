@@ -146,6 +146,7 @@ def test_memory_profiler_measurements(func_no_effect):
     assert memory_profiler.best == 4
     assert memory_profiler.worst == 5
     assert memory_profiler.baseline_change == 1
+    assert memory_profiler.runs == 4
 
 
 def test_memory_profiler_no_side_effect(func_no_effect):
@@ -192,7 +193,7 @@ def test_time_profiler_measurements(func_no_effect):
     measurements = [1, 1, 3, 3]
 
     time_profiler = TimeProfiler(func_no_effect)
-    time_profiler._measurements = [1, 1, 3, 3]
+    time_profiler._measurements = measurements
 
     assert time_profiler.less_is_better is True
     assert time_profiler.median == 2
