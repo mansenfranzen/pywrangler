@@ -248,8 +248,6 @@ class MemoryProfiler(BaseProfiler):
     usage during function execution and the baseline memory usage before
     function execution.
 
-    Note, memory consumption of child processes are included.
-
     In addition, compute the mean increase in baseline memory usage between
     repetitions which might indicate memory leakage.
 
