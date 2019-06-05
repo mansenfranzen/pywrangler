@@ -91,13 +91,13 @@ class BaseWrangler:
 
         return self
 
-    def fit(self):
+    def fit(self, *args, **kwargs):
         raise NotImplementedError
 
-    def transform(self):
+    def transform(self, *args, **kwargs):
         raise NotImplementedError
 
-    def fit_transform(self):
+    def fit_transform(self, *args, **kwargs):
         raise NotImplementedError
 
     def __repr__(self):
