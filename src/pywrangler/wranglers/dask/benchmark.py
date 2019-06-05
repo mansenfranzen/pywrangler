@@ -20,8 +20,8 @@ class DaskBaseProfiler:
     """
 
     def _wrap_fit_transform(self) -> Callable:
-        """Wrapper function to call `compute()` on dask wrangler instances to
-        enforce computation on lazily evaluated dask graphs.
+        """Wrapper function to call `compute()` on wrangler's `fit_transform`
+        to enforce computation on lazily evaluated dask graphs.
 
         Returns
         -------
