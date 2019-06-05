@@ -11,7 +11,8 @@ pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
 from pywrangler.wranglers.spark.base import SparkSingleNoFit
-from pywrangler.wranglers.spark.benchmark import SparkTimeProfiler
+from pywrangler.wranglers.spark.benchmark import SparkTimeProfiler, \
+    SparkBaseProfiler
 
 SLEEP = 0.0001
 
@@ -40,13 +41,27 @@ def test_spark_time_profiler_fastest(spark, wrangler_sleeps):
 
 
 def test_spark_time_profiler_no_caching(spark, wrangler_sleeps):
-    """Pyspark input dataframes are cached during time profiling. Ensure input
-    dataframes are released from caching after profiling.
-
-    """
-
     df_input = spark.range(10).toDF("col")
 
     SparkTimeProfiler(wrangler_sleeps(), 1).profile(df_input)
 
     assert df_input.is_cached is False
+
+
+def test_spark_time_profiler_caching(spark, wrangler_sleeps):
+    """Cache is released after profiling."""
+    df_input = spark.range(10).toDF("col")
+
+    SparkTimeProfiler(wrangler_sleeps(), 1, cache_input=True).profile(df_input)
+
+    assert df_input.is_cached is False
+
+
+def test_spark_base_profiler_cache_input(spark):
+    df = spark.range(10).toDF("col")
+
+    SparkBaseProfiler._cache_input([df])
+    assert df.is_cached is True
+
+    SparkBaseProfiler._clear_cached_input([df])
+    assert df.is_cached is False
