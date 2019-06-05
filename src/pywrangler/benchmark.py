@@ -20,7 +20,7 @@ from pywrangler.util.helper import get_param_names
 
 
 def allocate_memory(size: float) -> np.ndarray:
-    """Helper function for testing to allocate memory by creating numpy array
+    """Helper function to approximately allocate memory by creating numpy array
     with given size in MiB.
 
     Numpy is used deliberately to define the used memory via dtype.
@@ -50,9 +50,10 @@ def allocate_memory(size: float) -> np.ndarray:
 class BaseProfiler:
     """Base class defining the interface for all profilers.
 
-    Subclasses have to implement `profile` (the actual profiling
-    implementation) and `less_is_better` (defining the ranking of profiling
-    measurements).
+    Subclasses have to implement `profile` (the actual profiling method) and
+    `less_is_better` (defining the ranking of profiling measurements).
+
+    The private attribute `_measurements` is assumed to be set by `profile`.
 
     Attributes
     ----------
