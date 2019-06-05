@@ -1,5 +1,7 @@
 """This module contains benchmarking utility for pandas wranglers.
 
+TODO: implement SparkMemoryProfiler
+
 """
 
 import warnings
@@ -7,7 +9,7 @@ from typing import Callable, Iterable, Union
 
 from pyspark.sql import DataFrame
 
-from pywrangler.benchmark import MemoryProfiler, TimeProfiler
+from pywrangler.benchmark import TimeProfiler
 from pywrangler.wranglers.spark.base import SparkWrangler
 
 
@@ -145,72 +147,3 @@ class SparkTimeProfiler(TimeProfiler, SparkBaseProfiler):
             self._clear_cached_input(dfs)
 
         return self
-
-
-class SparkMemoryProfiler(MemoryProfiler, SparkBaseProfiler):
-    """Approximate memory usage that a spark wrangler instance requires to
-    execute the `fit_transform` step.
-
-    #TODO: provide implementation for profile
-
-    Parameters
-    ----------
-    func: callable
-        Callable object to be memory profiled.
-    repetitions: int, optional
-        Number of repetitions.
-    interval: float, optional
-        Defines interval duration between consecutive memory usage
-        measurements in seconds.
-    cache_input: bool, optional
-        Spark dataframes may be cached before timing execution to ensure
-        timing measurements only capture wrangler's `fit_transform`. By
-        default, it is disabled.
-
-    Attributes
-    ----------
-    measurements: list
-        The actual profiling measurements in bytes.
-    best: float
-        The best measurement in bytes.
-    median: float
-        The median of measurements in bytes.
-    worst: float
-        The worst measurement in bytes.
-    std: float
-        The standard deviation of measurements in bytes.
-    runs: int
-        The number of measurements.
-    baseline_change: float
-        The median change in baseline memory usage across all runs in bytes.
-
-    Methods
-    -------
-    profile
-        Contains the actual profiling implementation.
-    report
-        Print simple report consisting of best, median, worst, standard
-        deviation and the number of measurements.
-    profile_report
-        Calls profile and report in sequence.
-
-
-    """
-
-    def __init__(self, wrangler: SparkWrangler,
-                 repetitions: Union[None, int] = 5,
-                 interval: float = 0.01,
-                 cache_input: bool = False):
-        self.wrangler = wrangler
-        self.cache_input = cache_input
-
-        func = self._wrap_fit_transform()
-        super().__init__(func, repetitions, interval)
-
-    def profile(self, *dfs: DataFrame, **kwargs):
-        """Profiles timing given input dataframes `dfs` which are passed to
-        `fit_transform`.
-
-        """
-
-        raise NotImplementedError
