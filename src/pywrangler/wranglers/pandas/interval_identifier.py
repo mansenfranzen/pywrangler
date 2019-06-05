@@ -157,9 +157,8 @@ class NaiveIterator(_BaseIntervalIdentifier):
             else:
                 intermediate.append(active)
 
-        else:
-            # finally, add rest to result which must be invalid
-            result.extend([0] * len(intermediate))
+        # finally, add rest to result which must be invalid
+        result.extend([0] * len(intermediate))
 
         return result
 
