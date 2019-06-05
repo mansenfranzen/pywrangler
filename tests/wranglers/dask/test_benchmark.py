@@ -165,6 +165,8 @@ def test_dask_memory_profiler_profile_return_self(test_wrangler):
     assert mem_profiler.runs == 1
 
 
+@pytest.mark.xfail(reason="Succeeds locally but sometimes fails remotely due "
+                          "to non deterministic memory management.")
 def test_dask_memory_profiler_cached_lower_usage(mean_wranger):
     pdf = pd.DataFrame(np.random.rand(1000000, 10))
     df_input = dd.from_pandas(pdf, 5).mean()
