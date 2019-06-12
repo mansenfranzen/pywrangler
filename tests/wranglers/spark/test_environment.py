@@ -7,8 +7,9 @@ import subprocess
 
 import pytest
 
+pytestmark = pytest.mark.pyspark
 
-@pytest.mark.pyspark
+
 def test_java_environment():
     """Pyspark requires Java to be available. It uses Py4J to start and
     communicate with the JVM. Py4J looks for JAVA_HOME or falls back calling
@@ -29,7 +30,6 @@ def test_java_environment():
         raise EnvironmentError("Java setup broken.")
 
 
-@pytest.mark.pyspark
 def test_pyspark_import():
     """Fail if pyspark can't be imported. This test is mandatory because other
     spark tests will be skipped if the spark session fixture fails.
@@ -43,9 +43,8 @@ def test_pyspark_import():
         pytest.fail("pyspark can't be imported")
 
 
-@pytest.mark.pyspark
 def test_pyspark_pandas_interaction(spark):
-    """Check simple interaction between pyspark and pandes.
+    """Check simple interaction between pyspark and pandas.
 
     """
 

@@ -6,6 +6,8 @@ conversions.
 import collections
 from typing import Any, Tuple
 
+import pandas as pd
+
 
 def ensure_tuple(values: Any) -> Tuple[Any]:
     """For convenience, some parameters may accept a single value (string
@@ -31,8 +33,8 @@ def ensure_tuple(values: Any) -> Tuple[Any]:
     elif not isinstance(values, collections.Iterable):
         return (values, )
 
-    # handle single string which is iterable but still is only one value
-    elif isinstance(values, str):
+    # handle exception which are iterable but still count as one value
+    elif isinstance(values, (str, pd.DataFrame)):
         return (values, )
 
     # anything else should ok to be converted to tuple

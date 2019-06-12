@@ -53,23 +53,3 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if skip_item in item.keywords:
                 item.add_marker(skip)
-
-
-@pytest.fixture(scope="session")
-def spark(request):
-    """Provide session wide Spark Session to avoid expensive recreation for
-    each test.
-
-    If pyspark is not available, skip tests.
-
-    """
-
-    try:
-        from pyspark.sql import SparkSession
-        spark = SparkSession.builder.getOrCreate()
-
-        request.addfinalizer(lambda: spark.stop())
-        return spark
-
-    except ImportError:
-        pytest.skip("Pyspark not available.")

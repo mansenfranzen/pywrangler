@@ -157,9 +157,8 @@ class NaiveIterator(_BaseIntervalIdentifier):
             else:
                 intermediate.append(active)
 
-        else:
-            # finally, add rest to result which must be invalid
-            result.extend([0] * len(intermediate))
+        # finally, add rest to result which must be invalid
+        result.extend([0] * len(intermediate))
 
         return result
 
@@ -195,10 +194,10 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
         bool_end_shift = bool_end.shift().fillna(False)
 
         # get increasing ids for intervals (in/valid) with cumsum
-        ser_ids = (bool_start + bool_end_shift).cumsum()
+        ser_ids = bool_start.add(bool_end_shift).cumsum()
 
         # separate valid vs invalid: ids with start AND end marker are valid
-        bool_valid_ids = (bool_start + bool_end).groupby(ser_ids).sum().eq(2)
+        bool_valid_ids = bool_start.add(bool_end).groupby(ser_ids).sum().eq(2)
 
         valid_ids = bool_valid_ids.index[bool_valid_ids].values
         bool_valid = ser_ids.isin(valid_ids)

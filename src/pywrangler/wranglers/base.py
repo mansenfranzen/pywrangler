@@ -3,9 +3,8 @@ classes including wrangler descriptions and parameters.
 
 """
 
-import inspect
-
 from pywrangler.util import _pprint
+from pywrangler.util.helper import get_param_names
 
 
 class BaseWrangler:
@@ -60,11 +59,7 @@ class BaseWrangler:
 
         """
 
-        init = self.__class__.__init__
-        signature = inspect.signature(init)
-        parameters = signature.parameters.values()
-
-        param_names = [x.name for x in parameters if x.name != "self"]
+        param_names = get_param_names(self.__class__.__init__, ["self"])
         param_dict = {x: getattr(self, x) for x in param_names}
 
         return param_dict
@@ -96,13 +91,13 @@ class BaseWrangler:
 
         return self
 
-    def fit(self):
+    def fit(self, *args, **kwargs):
         raise NotImplementedError
 
-    def transform(self):
+    def transform(self, *args, **kwargs):
         raise NotImplementedError
 
-    def fit_transform(self):
+    def fit_transform(self, *args, **kwargs):
         raise NotImplementedError
 
     def __repr__(self):
@@ -110,7 +105,7 @@ class BaseWrangler:
         template = '{wrangler_name} ({computation_engine})\n\n{parameters}'\
 
         parameters = (_pprint.header("Parameters", 3) +
-                      _pprint.enumeration(self.get_params().items(), 3))
+                      _pprint.enumeration(self.get_params(), 3))
 
         _repr = template.format(wrangler_name=self.__class__.__name__,
                                 computation_engine=self.computation_engine,
