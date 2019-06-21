@@ -7,6 +7,7 @@ Version 0.1.0
 
 This is the initial release of pywrangler.
 
+- Add ``VectorizedCumSum`` pyspark implementation for ``IntervalIdentifier`` wrangler (`#7 <https://github.com/mansenfranzen/pywrangler/pull/7>`_).
 - Add benchmark utilities for pandas, spark and dask wranglers (`#5 <https://github.com/mansenfranzen/pywrangler/pull/5>`_).
 - Add sequential ``NaiveIterator`` and vectorized ``VectorizedCumSum`` pandas implementations for ``IntervalIdentifier`` wrangler (`#2 <https://github.com/mansenfranzen/pywrangler/pull/2>`_).
 - Add ``PandasWrangler`` (`#2 <https://github.com/mansenfranzen/pywrangler/pull/2>`_).
