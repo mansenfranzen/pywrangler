@@ -1,6 +1,15 @@
+"""This module contains tests for spark interval identifier.
+
+isort:skip_file
+"""
+
+
 import pytest
 
 import pandas as pd
+
+pytestmark = pytest.mark.pyspark  # noqa: E402
+pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
 from pywrangler.wranglers.spark.interval_identifier import VectorizedCumSum
 from pywrangler.wranglers.spark.testing import assert_spark_pandas_equality
@@ -27,9 +36,9 @@ from ..test_data.interval_identifier import (
     starts_with_single_interval
 )
 
-MARKER_TYPES = {"string": {"start": "start",
-                           "end": "end",
-                           "noise": "noise"},
+MARKER_TYPES = {"string": {"start": "start.start!2",
+                           "end": "end.end#4",
+                           "noise": "noise.noise?3"},
 
                 "int": {"start": 1,
                         "end": 2,
@@ -54,6 +63,9 @@ WRANGLER_KWARGS = dict(argnames='wrangler',
 SHUFFLE_KWARGS = dict(argnames='shuffle',
                       argvalues=(False, True),
                       ids=('Ordered', 'Shuffled'))
+
+REPARTITION_KWARGS = dict(argnames='repartition',
+                          argvalues=(None, 2, 5))
 
 TEST_CASES = (no_interval, single_interval, single_interval_spanning,
               starts_with_single_interval, ends_with_single_interval,
@@ -93,11 +105,13 @@ GROUPBY_ORDER_KWARGS = dict(argnames='groupby_order',
                             ids=GROUPBY_ORDER_IDS)
 
 
+@pytest.mark.parametrize(**REPARTITION_KWARGS)
 @pytest.mark.parametrize(**SHUFFLE_KWARGS)
 @pytest.mark.parametrize(**MARKERS_KWARGS)
 @pytest.mark.parametrize(**TEST_CASE_KWARGS)
 @pytest.mark.parametrize(**WRANGLER_KWARGS)
-def test_groupby_order_columns(test_case, wrangler, marker, shuffle, spark):
+def test_groupby_order_columns(test_case, wrangler, marker, shuffle,
+                               repartition, spark):
     """Tests against all available wranglers and test cases for different input
     types and shuffled data.
 
@@ -112,6 +126,9 @@ def test_groupby_order_columns(test_case, wrangler, marker, shuffle, spark):
         `MARKERS`.
     shuffle: bool
         Define if the data gets shuffled or not.
+    repartition: None, int
+        Define repartition for input dataframe.
+    spark: SparkSession
 
     """
 
@@ -126,6 +143,9 @@ def test_groupby_order_columns(test_case, wrangler, marker, shuffle, spark):
                         right_index=True)
 
     test_input = spark.createDataFrame(test_input)
+
+    if repartition:
+        test_input = test_input.repartition(repartition)
 
     # determine sort order, if test_case ends with 'reverse', than switch
     if test_case.__name__.endswith("reverse"):
@@ -158,3 +178,58 @@ def test_groupby_order_columns(test_case, wrangler, marker, shuffle, spark):
     test_output = wrangler_instance.fit_transform(test_input)
 
     assert_spark_pandas_equality(test_output, expected)
+
+
+@pytest.mark.parametrize(**REPARTITION_KWARGS)
+@pytest.mark.parametrize(**GROUPBY_ORDER_KWARGS)
+@pytest.mark.parametrize(**TEST_CASES_NO_ORDER_GROUP_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_no_groupby_order_columns(test_case, wrangler, groupby_order,
+                                  repartition, spark):
+    """Tests wranglers while not defining order or/and groupby columns on a
+    subset of test cases which do not have a specific order or groupby.
+
+    Parameters
+    ----------
+    test_case: function
+        Generates test data for given test case. Refers to
+        `TEST_CASES_NO_ORDER_GROUP`.
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+    groupby_order dict
+        Defines the order and groupby columns. See `GROUPBY_ORDER_TYPES`.
+    repartition: None, int
+        Define repartition for input dataframe.
+    spark: SparkSession
+
+    """
+
+    marker = MARKER_TYPES["int"]
+
+    # generate test_input and expected result
+    test_input, expected = test_case(start=marker["start"],
+                                     end=marker["end"],
+                                     noise=marker["noise"],
+                                     target_column_name="iids",
+                                     shuffle=False)
+
+    expected = pd.merge(test_input, expected, left_index=True,
+                        right_index=True)
+
+    test_input = spark.createDataFrame(test_input)
+
+    if repartition:
+        test_input = test_input.repartition(repartition)
+
+    # instantiate actual wrangler_instance
+    wrangler_instance = wrangler(marker_column="marker",
+                                 marker_start=marker["start"],
+                                 marker_end=marker["end"],
+                                 **groupby_order)
+
+    if "order_columns" not in groupby_order:
+        with pytest.raises(ValueError):
+            wrangler_instance.fit_transform(test_input)
+    else:
+        test_output = wrangler_instance.fit_transform(test_input)
+        assert_spark_pandas_equality(test_output, expected)
