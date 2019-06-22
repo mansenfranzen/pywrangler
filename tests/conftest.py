@@ -37,9 +37,13 @@ def pytest_collection_modifyitems(config, items):
 
     """
 
-    for skip_item in ("pyspark", "dask"):
+    tox_env = os.environ.get("PYWRANGLER_TEST_ENV", "").lower()
 
-        tox_env = os.environ.get("PYWRANGLER_TEST_ENV", "").lower()
+    # if master version, all tests are run, no skipping required
+    if "master" in tox_env:
+        return
+
+    for skip_item in ("pyspark", "dask"):
         run_env = skip_item in tox_env
         run_cmd = config.getoption("--{}".format(skip_item))
 

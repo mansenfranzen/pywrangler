@@ -58,8 +58,6 @@ def test_pandas_wrangler_validate_columns_raises():
     with pytest.raises(ValueError):
         PandasWrangler.validate_columns(df, ("col3", "col1"))
 
-    # TODO: Update type hints for varialbe length tuples
-
 
 def test_pandas_wrangler_validate_columns_not_raises():
 

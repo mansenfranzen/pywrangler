@@ -172,7 +172,7 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
     def _transform(self, series: pd.Series) -> List[int]:
         """First, get enumeration of all intervals (valid and invalid). Every
         time a start or end marker is encountered, increase interval id by one.
-        However, shift the end marker by one to include the end marker in the
+        The end marker is shifted by one to include the end marker in the
         current interval. This is realized via the cumulative sum of boolean
         series of start markers and shifted end markers.
 

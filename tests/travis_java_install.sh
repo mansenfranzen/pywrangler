@@ -5,7 +5,7 @@
 # selected as language. Ubuntu 14.04 does not work due to missing python 3.7
 # support on TravisCI which does have Java 8 as default.
 
-if [[ $ENV_STRING == *"spark"* ]]; then
+if [[ $ENV_STRING == *"spark"* ]] || [[ $ENV_STRING == *"master"* ]]; then
   # show current JAVA_HOME and java version
   echo "Current JAVA_HOME: $JAVA_HOME"
   echo "Current java -version:"
