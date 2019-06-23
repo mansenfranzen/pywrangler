@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from pywrangler.base import BaseWrangler
-from pywrangler.util.sanitizer import ensure_tuple
+from pywrangler.util.sanitizer import ensure_iterable
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
 
 
@@ -78,7 +78,7 @@ class PandasWrangler(BaseWrangler):
         if not columns:
             return
 
-        columns = ensure_tuple(columns)
+        columns = ensure_iterable(columns)
 
         for column in columns:
             if column not in df.columns:
@@ -96,8 +96,7 @@ class PandasWrangler(BaseWrangler):
          """
 
         if order_columns:
-            return df.sort_values(list(order_columns),
-                                  ascending=list(ascending))
+            return df.sort_values(order_columns, ascending=ascending)
         else:
             return df
 
@@ -109,7 +108,7 @@ class PandasWrangler(BaseWrangler):
          """
 
         if groupby_columns:
-            return df.groupby(list(groupby_columns))
+            return df.groupby(groupby_columns)
         else:
             return df.groupby(np.zeros(df.shape[0]))
 

@@ -67,8 +67,8 @@ class VectorizedCumSum(SparkSingleNoFit, IntervalIdentifier):
         orderby = self.prepare_orderby(self.order_columns, self.ascending)
         groupby = self.groupby_columns or []
 
-        w_lag = Window.partitionBy(list(groupby)).orderBy(orderby)
-        w_id = Window.partitionBy(list(groupby) + [self.target_column_name])
+        w_lag = Window.partitionBy(groupby).orderBy(orderby)
+        w_id = Window.partitionBy(groupby + [self.target_column_name])
 
         # get boolean series with start and end markers
         marker_col = F.col(self.marker_column)

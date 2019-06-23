@@ -9,7 +9,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 
 from pywrangler.base import BaseWrangler
-from pywrangler.util.sanitizer import ensure_tuple
+from pywrangler.util.sanitizer import ensure_iterable
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
 
 TYPE_OPT_COLUMN = Union[None, Iterable[Column]]
@@ -40,7 +40,7 @@ class SparkWrangler(BaseWrangler):
         if not columns:
             return
 
-        columns = ensure_tuple(columns)
+        columns = ensure_iterable(columns)
 
         for column in columns:
             if column not in df.columns:

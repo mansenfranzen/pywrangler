@@ -133,7 +133,7 @@ class PandasMemoryProfiler(MemoryProfiler):
 
         # usage output
         dfs_output = self._wrangler.fit_transform(*dfs)
-        dfs_output = sanitizer.ensure_tuple(dfs_output)
+        dfs_output = sanitizer.ensure_iterable(dfs_output)
         self._usage_output = self._memory_usage_dfs(*dfs_output)
 
         # usage during fit_transform

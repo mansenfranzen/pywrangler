@@ -69,9 +69,9 @@ class IntervalIdentifier(BaseWrangler):
         self.marker_column = marker_column
         self.marker_start = marker_start
         self.marker_end = marker_end
-        self.order_columns = sanitizer.ensure_tuple(order_columns)
-        self.groupby_columns = sanitizer.ensure_tuple(groupby_columns)
-        self.ascending = sanitizer.ensure_tuple(ascending)
+        self.order_columns = sanitizer.ensure_iterable(order_columns)
+        self.groupby_columns = sanitizer.ensure_iterable(groupby_columns)
+        self.ascending = sanitizer.ensure_iterable(ascending)
         self.target_column_name = target_column_name
 
         # sanity checks for sort order

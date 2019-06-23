@@ -4,24 +4,31 @@ conversions.
 """
 
 import collections
-from typing import Any, Tuple
+from typing import Any, List, Tuple, Type, Union
 
 import pandas as pd
 
+ITER_TYPE = Union[List[Any], Tuple[Any], None]
 
-def ensure_tuple(values: Any) -> Tuple[Any]:
+
+def ensure_iterable(values: Any, type: Type = list) -> ITER_TYPE:
     """For convenience, some parameters may accept a single value (string
     for a column name) or multiple values (list of strings for column
-    names). This function ensures that the output is always a tuple of values.
+    names). Other functions always require a list or tuple of strings. Hence,
+    this function ensures that the output is always an iterable of given
+    `constructor` type (list or tuple) while taking care of exceptions just
+    like strings.
 
     Parameters
     ----------
     values: Any
         Input values to be converted to tuples.
+    type: {list, tuple}
+        Iterable class to return.
 
     Returns
     -------
-    tupled: Tuple[Any]
+    iterable: List[Any], Tuple[Any]
 
     """
 
@@ -29,14 +36,14 @@ def ensure_tuple(values: Any) -> Tuple[Any]:
     if values is None:
         return None
 
-    # if not iterable, return tuple with single value
+    # if not iterable, return iterable with single value
     elif not isinstance(values, collections.Iterable):
-        return (values, )
+        return type([values])
 
     # handle exception which are iterable but still count as one value
     elif isinstance(values, (str, pd.DataFrame)):
-        return (values, )
+        return type([values])
 
-    # anything else should ok to be converted to tuple
+    # anything else should ok to be converted to tuple/list
     else:
-        return tuple(values)
+        return type(values)
