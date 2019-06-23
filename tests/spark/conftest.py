@@ -17,6 +17,8 @@ def spark(request):
     try:
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
+
+        # use pyarrow if available for pandas to spark communication
         spark.conf.set("spark.sql.execution.arrow.enabled", "true")
 
         request.addfinalizer(lambda: spark.stop())
