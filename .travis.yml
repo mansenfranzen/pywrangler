@@ -67,7 +67,7 @@ matrix:
 dist: xenial
 
 before_install:
-  - source tests/travis_java_install.sh
+  - source travisci/java_install.sh
 
 install:
   - travis_retry pip install --upgrade pip
@@ -78,6 +78,6 @@ script:
   - tox -e $(echo py$TRAVIS_PYTHON_VERSION-$ENV_STRING | tr -d .)
 
 after_success:
-  - source tests/travis_coveralls_master.sh
+  - source travisci/coveralls_master.sh
 
 cache: pip

@@ -4,7 +4,7 @@
 
 from dask.dataframe import DataFrame
 
-from pywrangler.wranglers.base import BaseWrangler
+from pywrangler.base import BaseWrangler
 
 
 class DaskWrangler(BaseWrangler):

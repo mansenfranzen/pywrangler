@@ -4,9 +4,9 @@ and corresponding descriptions.
 """
 
 
+from pywrangler.base import BaseWrangler
 from pywrangler.util import sanitizer
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
-from pywrangler.wranglers.base import BaseWrangler
 
 
 class IntervalIdentifier(BaseWrangler):

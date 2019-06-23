@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 
 from pywrangler.benchmark import MemoryProfiler, TimeProfiler
+from pywrangler.pandas.base import PandasWrangler
 from pywrangler.util import sanitizer
-from pywrangler.wranglers.pandas.base import PandasWrangler
 
 
 class PandasTimeProfiler(TimeProfiler):

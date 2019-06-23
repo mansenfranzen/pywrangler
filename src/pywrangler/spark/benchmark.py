@@ -10,7 +10,7 @@ from typing import Callable, Iterable, Union
 from pyspark.sql import DataFrame
 
 from pywrangler.benchmark import TimeProfiler
-from pywrangler.wranglers.spark.base import SparkWrangler
+from pywrangler.spark.base import SparkWrangler
 
 
 class SparkBaseProfiler:

@@ -5,8 +5,8 @@
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
-from pywrangler.wranglers.interfaces import IntervalIdentifier
-from pywrangler.wranglers.spark.base import SparkSingleNoFit
+from pywrangler.spark.base import SparkSingleNoFit
+from pywrangler.wranglers import IntervalIdentifier
 
 
 class VectorizedCumSum(SparkSingleNoFit, IntervalIdentifier):

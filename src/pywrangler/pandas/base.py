@@ -5,9 +5,9 @@
 import numpy as np
 import pandas as pd
 
+from pywrangler.base import BaseWrangler
 from pywrangler.util.sanitizer import ensure_tuple
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
-from pywrangler.wranglers.base import BaseWrangler
 
 
 class PandasWrangler(BaseWrangler):

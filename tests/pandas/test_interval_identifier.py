@@ -1,11 +1,6 @@
 import pytest
 
-from pywrangler.wranglers.pandas.interval_identifier import (
-    NaiveIterator,
-    VectorizedCumSum
-)
-
-from ..test_data.interval_identifier import (
+from tests.test_data.interval_identifier import (
     end_marker_begins,
     ends_with_single_interval,
     groupby_multiple_intervals,
@@ -25,6 +20,11 @@ from ..test_data.interval_identifier import (
     single_interval_spanning,
     start_marker_left_open,
     starts_with_single_interval
+)
+
+from pywrangler.pandas.wranglers.interval_identifier import (
+    NaiveIterator,
+    VectorizedCumSum
 )
 
 # ensure backwards compatibility beyond pandas 0.20.0

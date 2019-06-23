@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 
 from pywrangler.benchmark import allocate_memory
-from pywrangler.wranglers.pandas.base import PandasSingleNoFit
-from pywrangler.wranglers.pandas.benchmark import (
+from pywrangler.pandas.base import PandasSingleNoFit
+from pywrangler.pandas.benchmark import (
     PandasMemoryProfiler,
     PandasTimeProfiler
 )

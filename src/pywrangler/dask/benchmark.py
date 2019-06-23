@@ -11,7 +11,7 @@ import numpy as np
 from dask.diagnostics import ResourceProfiler
 
 from pywrangler.benchmark import MemoryProfiler, TimeProfiler
-from pywrangler.wranglers.dask.base import DaskWrangler
+from pywrangler.dask.base import DaskWrangler
 
 
 class DaskBaseProfiler:

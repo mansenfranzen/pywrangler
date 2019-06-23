@@ -8,9 +8,9 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 
+from pywrangler.base import BaseWrangler
 from pywrangler.util.sanitizer import ensure_tuple
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
-from pywrangler.wranglers.base import BaseWrangler
 
 TYPE_OPT_COLUMN = Union[None, Iterable[Column]]
 

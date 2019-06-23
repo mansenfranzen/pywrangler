@@ -4,7 +4,7 @@
 
 import pytest
 
-from pywrangler.wranglers import base
+from pywrangler import base
 
 
 @pytest.fixture(scope="module")

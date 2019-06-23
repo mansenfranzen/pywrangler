@@ -6,8 +6,8 @@ from typing import List
 
 import pandas as pd
 
-from pywrangler.wranglers.interfaces import IntervalIdentifier
-from pywrangler.wranglers.pandas.base import PandasSingleNoFit
+from pywrangler.pandas.base import PandasSingleNoFit
+from pywrangler.wranglers import IntervalIdentifier
 
 
 class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):

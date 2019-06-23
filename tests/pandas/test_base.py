@@ -6,7 +6,7 @@ import pytest
 
 import pandas as pd
 
-from pywrangler.wranglers.pandas.base import PandasWrangler
+from pywrangler.pandas.base import PandasWrangler
 
 
 def test_pandas_base_wrangler_engine():

@@ -11,10 +11,10 @@ import pandas as pd
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
-from pywrangler.wranglers.spark.interval_identifier import VectorizedCumSum
-from pywrangler.wranglers.spark.testing import assert_spark_pandas_equality
+from pywrangler.spark.wranglers.interval_identifier import VectorizedCumSum
+from pywrangler.spark.testing import assert_spark_pandas_equality
 
-from ..test_data.interval_identifier import (
+from tests.test_data.interval_identifier import (
     end_marker_begins,
     ends_with_single_interval,
     groupby_multiple_intervals,

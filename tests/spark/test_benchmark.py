@@ -10,8 +10,8 @@ import pytest
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
-from pywrangler.wranglers.spark.base import SparkSingleNoFit
-from pywrangler.wranglers.spark.benchmark import SparkTimeProfiler, \
+from pywrangler.spark.base import SparkSingleNoFit
+from pywrangler.spark.benchmark import SparkTimeProfiler, \
     SparkBaseProfiler
 
 SLEEP = 0.0001

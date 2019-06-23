@@ -4,7 +4,7 @@
 
 import pytest
 
-from pywrangler.wranglers import interfaces
+from pywrangler import wranglers
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +21,7 @@ def interval_ident_kwargs():
 
 def test_base_interval_identifier_init(interval_ident_kwargs):
 
-    bii = interfaces.IntervalIdentifier(**interval_ident_kwargs)
+    bii = wranglers.IntervalIdentifier(**interval_ident_kwargs)
 
     assert bii.get_params() == interval_ident_kwargs
 
@@ -32,7 +32,7 @@ def test_base_interval_identifier_sort_length_exc(interval_ident_kwargs):
     incorrect_length["ascending"] = (True, )
 
     with pytest.raises(ValueError):
-        interfaces.IntervalIdentifier(**incorrect_length)
+        wranglers.IntervalIdentifier(**incorrect_length)
 
 
 def test_base_interval_identifier_sort_keyword_exc(interval_ident_kwargs):
@@ -41,4 +41,4 @@ def test_base_interval_identifier_sort_keyword_exc(interval_ident_kwargs):
     incorrect_keyword["ascending"] = ("wrong keyword", "wrong keyword too")
 
     with pytest.raises(ValueError):
-        interfaces.IntervalIdentifier(**incorrect_keyword)
+        wranglers.IntervalIdentifier(**incorrect_keyword)

@@ -9,7 +9,7 @@ import pandas as pd
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
-from pywrangler.wranglers.spark.testing import assert_spark_pandas_equality
+from pywrangler.spark.testing import assert_spark_pandas_equality
 
 
 def test_assert_spark_pandas_equality_no_assert(spark):

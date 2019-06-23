@@ -17,6 +17,7 @@ def spark(request):
     try:
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
+        spark.conf.set("spark.sql.execution.arrow.enabled", "true")
 
         request.addfinalizer(lambda: spark.stop())
         return spark

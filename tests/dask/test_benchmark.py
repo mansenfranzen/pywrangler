@@ -15,12 +15,12 @@ dask = pytest.importorskip("dask")  # noqa: E402
 from dask import dataframe as dd
 
 from pywrangler.benchmark import allocate_memory
-from pywrangler.wranglers.dask.benchmark import (
+from pywrangler.dask.benchmark import (
     DaskTimeProfiler,
     DaskMemoryProfiler,
     DaskBaseProfiler
 )
-from pywrangler.wranglers.dask.base import DaskSingleNoFit
+from pywrangler.dask.base import DaskSingleNoFit
 
 
 @pytest.fixture
