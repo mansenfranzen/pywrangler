@@ -184,10 +184,25 @@ def pretty_time_duration(seconds: float, precision: int = 1, align: str = ">",
              ('µs', 1e-6),
              ('ns', 1e-9)]
 
+    # catch 0 value
+    if seconds == 0:
+        return template.format(time_delta=0,
+                               align=align,
+                               width=width,
+                               precision=0,
+                               unit="s")
+
+    # catch negative value
+    if seconds < 0:
+        sign = -1
+        seconds = abs(seconds)
+    else:
+        sign = 1
+
     for unit_name, unit_seconds in units:
         if seconds > unit_seconds:
             time_delta = seconds / unit_seconds
-            return template.format(time_delta=time_delta,
+            return template.format(time_delta=sign * time_delta,
                                    align=align,
                                    width=width,
                                    precision=precision,
