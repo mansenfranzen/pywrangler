@@ -2,10 +2,14 @@
 
 """
 
-import typing
+import re
+import textwrap
+from typing import Any, List, Tuple, Union
 
-ITERABLE = typing.Union[typing.List[str], typing.Tuple[str]]
-ENUM = typing.Union[ITERABLE, dict]
+ITERABLE = Union[List[str], Tuple[str]]
+ENUM = Union[ITERABLE, dict]
+
+REGEX_REMOVE_WHITESPACES = re.compile(r"\s{2,}")
 
 
 def _join(lines: ITERABLE) -> str:
@@ -207,3 +211,53 @@ def pretty_time_duration(seconds: float, precision: int = 1, align: str = ">",
                                    width=width,
                                    precision=precision,
                                    unit=unit_name)
+
+
+def textwrap_docstring(dobject: Any, width: int = 70) -> List[str]:
+    """Extract doc string from object and textwrap it with given width. Remove
+    double whitespaces.
+
+    Parameters
+    ----------
+    dobject: Any
+        Object to extract doc string from.
+    width: int, optional
+        Length of text body to wrap doc string.
+
+    Returns
+    -------
+    Wrapped doc string as list of lines.
+
+    """
+
+    if not dobject.__doc__:
+        return []
+
+    sanitized = REGEX_REMOVE_WHITESPACES.sub(" ", dobject.__doc__)
+    return textwrap.wrap(sanitized, width=width)
+
+
+def truncate(string: str, width: int, ending: str = "...") -> str:
+    """Truncate string to be no longer than provided width. When truncated, add
+    add `ending` to shortened string as indication of truncation.
+
+    Parameters
+    ----------
+    string: str
+        String to be truncated.
+    width: int
+        Maximum amount of characters before truncation.
+    ending: str, optional
+        Indication string of truncation.
+
+    Returns
+    -------
+    Truncated string.
+
+    """
+
+    if not len(string) > width:
+        return string
+
+    length = width - len(ending)
+    return string[:length] + ending
