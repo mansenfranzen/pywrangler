@@ -4,14 +4,30 @@
 
 import inspect
 import re
-import textwrap
 from collections import OrderedDict
 
 import pandas as pd
 from pyspark.ml import PipelineModel, Transformer
 from pyspark.ml.param.shared import Param, Params
 
-from pywrangler.util._pprint import pretty_time_duration
+from pywrangler.util._pprint import pretty_time_duration as fmt_time
+from pywrangler.util._pprint import textwrap_docstring, truncate
+
+REGEX_STAGE = re.compile(r".*?\*\((\d+)\).*")
+
+DESC_H = "| ({idx}) - {identifier}, {cols} columns, stage {stage}, {cached}"
+DESC_B = "| {text:76} |"
+DESC_L = "+" + "-" * 78 + "+"
+DESC_A = " " * 38 + "||\n" + " " * 37 + "\\||/\n" + " " * 38 + r"\/"
+
+PROF_H = "| Idx |    Identifier    | Total time | Partial time " \
+         "| Cached time | Stage | Shape (rows x cols) |"
+PROF_L = "+-----+------------------+------------+--------------" \
+         "+-------------+-------+---------------------+"
+PROF_B = "| {idx:^3} | {name:^16} | {total_time:^10} | {partial_time:^12} " \
+         "| {cached_time:^11} | {stage:^5} | {shape:^19} |"
+
+ERR_TYPE_ACCESS = "Value has incorrect type '{}' (integer or string allowed)."
 
 
 def _create_getter_setter(name):
@@ -27,8 +43,8 @@ def _create_getter_setter(name):
     def getter(self):
         return self.getOrDefault(getattr(self, name))
 
-    return {f"get{name}": getter,
-            f"set{name}": setter}
+    return {"get{name}".format(name=name): getter,
+            "set{name}".format(name=name): setter}
 
 
 def func_to_spark_transformer(func):
@@ -85,10 +101,6 @@ def func_to_spark_transformer(func):
     return transformer_instance
 
 
-REGEX_STAGE = re.compile(r".*?\*\((\d+)\).*")
-REGEX_CLEAR = re.compile(r"\s{2,}")
-
-
 class Pipeline(PipelineModel):
     """Represents a compiled pipeline with transformers and fitted models.
 
@@ -101,198 +113,253 @@ class Pipeline(PipelineModel):
     arguments will be available as normal parameters of the resulting pyspark
     `Transformer`.
 
-    In addtion, the `_transform` method checks for an optionally defined
+    In addition, the `_transform` method checks for an optionally defined
     `IsCached` parameter to cache intermediate results for each stage. This
-    enables the possibility to cache specific stages.
-    The `desribe` method gives a brief overview of the stages.
-    The `profile` method allows to get detailed timings and provides
-    indicators for possible caching benefits for each stage.
+    enables the possibility to cache specific stages. The `describe` method
+    gives a brief overview of the stages. The `profile` method allows to get
+    detailed timings and provides indicators for possible caching benefits for
+    each stage.
 
     Also, `__call__` is implemented to conveniently access dataframe
     representations for each stage and `__getitem__` allows to access
     stage representation.
 
+    Each pipeline instance may be provided with an explicit documentation
+    string.
+
     """
 
-    def __init__(self, stages):
-        stages = [self._check_convert_transformer(stage)
-                  for stage in stages]
+    def __init__(self, stages, doc=None):
+        """Instantiate pipeline. Convert functions into `Transformer`
+        instances if necessary.
 
+        In addition to `self.stages`, `self._stage_mapping` allows label based
+        access to stages via identifiers, `self._stage_results` keeps track
+        of intermediate dataframe representation once `transform` is called
+        and `self._stage_profiles` keeps track of profiling results once
+        `profile` is called.
+
+
+
+        """
+
+        stages = [self._check_convert_transformer(stage) for stage in stages]
         super().__init__(stages)
 
-        self.stage_dict = OrderedDict()
+        self._stage_mapping = OrderedDict()
+        self._stage_results = OrderedDict()
+        self._stage_profiles = OrderedDict()
+
         for stage in self.stages:
             identifier = self._create_stage_identifier(stage)
-            self.stage_dict[identifier] = stage
+            self._stage_mapping[identifier] = stage
 
-        self.stage_results = OrderedDict()
+        # overwrite class doc string if pipe doc is explicitly provided
+        if doc:
+            self.__doc__ = doc
 
-    def _transform(self, dataset):
+    def _transform(self, df):
+        """Apply stage's `transform` methods in order while storing
+        intermediate stage results and respecting optional cache settings.
 
-        self.stage_results.clear()
-        self.stage_results["input_dataframe"] = dataset
+        """
 
-        for identifier, stage in self.stage_dict.items():
-            dataset = stage.transform(dataset)
+        self._stage_results.clear()
+        self._stage_results["input_dataframe"] = df
 
-            try:
-                is_cached = stage.getIsCached()
-            except AttributeError:
-                is_cached = False
+        for identifier, stage in self._stage_mapping.items():
+            df = stage.transform(df)
 
-            if is_cached:
-                dataset.cache()
+            if self._is_cached(stage):
+                df.cache()
 
-            self.stage_results[identifier] = dataset
+            self._stage_results[identifier] = df
 
-        return dataset
+        return df
 
     def describe(self):
+        """Print description of pipeline while reporting index, identifier,
+        number of columns, execution plan stage, cache and doc string of every
+        stage in order.
 
-        header = "| ({idx}) - {identifier}, {cols} columns, stage {stage}"
-        body = "| {text:76} |"
-        line = "+" + "-" * 78 + "+"
-        arrow = r"""                                      ||
-                                     \||/
-                                      \/"""
+        It make some time depending on DAG complexity because `explain` will be
+        called on each stage's dataframe representation.
 
-        for idx, (identifier, stage) in enumerate(self.stage_dict.items()):
+        """
+
+        enumeration = enumerate(self._stage_mapping.items())
+        for idx, (identifier, stage) in enumeration:
+
+            # variables
             df = self(identifier)
             cols = len(df.columns)
             exec_stage = self._get_execution_stage(df)
-            title = header.format(idx=idx,
-                                  identifier=identifier,
-                                  cols=cols,
-                                  stage=exec_stage)
-            title = title.ljust(79, " ") + "|"
+            cached = "cached" if self._is_cached(stage) else "not cached"
 
-            if not stage.__doc__:
-                docs = []
-            else:
-                cleared = REGEX_CLEAR.sub(" ", stage.__doc__)
-                docs = [body.format(text=wrapped)
-                        for wrapped in textwrap.wrap(cleared, width=78)]
-                docs.append(line)
+            # header string
+            header = DESC_H.format(idx=idx,
+                                   identifier=truncate(identifier, 35),
+                                   cols=cols,
+                                   stage=exec_stage,
+                                   cached=cached).ljust(79, " ") + "|"
 
-            print(line, title, line, *docs, arrow, sep="\n")
+            # doc string
+            docs = textwrap_docstring(stage)
+            if docs:
+                docs = [DESC_B.format(text=text) for text in docs] + [DESC_L]
 
-    def profile(self):
+            # arrow for all but first stage
+            if idx != 0:
+                print(DESC_A)
+
+            # print description
+            print(DESC_L, header, DESC_L, *docs, sep="\n")
+
+    def profile(self, verbosity=None):
+        """Profiles each stage of the pipeline with and without caching
+        enabled. Total, partial and cache times are reported. Partial time is
+        computed as the current total time minus the previous total time. If
+        partial and cache time differ greatly, this may indicate multiple
+        computations of previous stages and a possible benefit of caching. The
+        shape (number of columns and rows) is also reported.
+
+        Before and after profiling, all dataframes are unpersisted. Finally,
+        caching is enabled for stages with caching attribute.
+
+        Please be aware that this method will take a while depending on your
+        input data because it will call an action on each stage twice and it
+        will cache each stage's result temporarily.
+
+        """
+
         self._is_transformed()
-        self.stage_profiles = OrderedDict()
-        self._profile_without_caching()
-        self._profile_with_caching()
+        self._stage_profiles.clear()
+
+        self._unpersist_dataframes(verbosity)
+        self._profile_without_caching(verbosity)
+        self._profile_with_caching(verbosity)
+        self._unpersist_dataframes(verbosity)
+
         self._restore_caching()
         self._profile_report()
 
-    def _profile_without_caching(self):
-        """Make profile without caching enabled.
+    def _unpersist_dataframes(self, verbosity=None):
+        """Unpersists all dataframe representations except input dataframe.
 
         """
 
-        df = self.stage_results["input_dataframe"]
+        if verbosity:
+            print("Unpersisting all dataframes.")
 
-        # make sure df is not cached
-        df.unpersist(blocking=True)
+        for identifier, df in self._stage_results.items():
+            if identifier == "input_dataframe":
+                continue
+
+            df.unpersist(blocking=True)
+
+    def _profile_without_caching(self, verbosity=None):
+        """Make profile without caching enabled. Store total and partial time,
+        counts and execution plan stage.
+
+        """
+
+        if verbosity:
+            print("Profile without caching:\n\tProfile input dataframe")
 
         # profile initial stage
+        df = self._stage_results["input_dataframe"]
         prof = self._profile_stage(df)
         prof["partial_time"] = 0
         prof["cached_time"] = 0
-        self.stage_profiles["input_dataframe"] = prof
+        self._stage_profiles["input_dataframe"] = prof
 
-        # keep ascendent time
+        # keep previous time
         temp_total_time = prof["total_time"]
 
-        for identifier, stage in self.stage_dict.items():
+        for identifier, stage in self._stage_mapping.items():
+            if verbosity:
+                print("\tProfile {}".format(identifier))
+
             df = stage.transform(df)
-            df.unpersist(blocking=True)
 
             prof = self._profile_stage(df)
             prof["partial_time"] = prof["total_time"] - temp_total_time
-            self.stage_profiles[identifier] = prof
+            self._stage_profiles[identifier] = prof
 
             temp_total_time = prof["total_time"]
 
-    def _profile_with_caching(self):
-        """Make profile with caching enabled for each stage.
+    def _profile_with_caching(self, verbosity=None):
+        """Make profile with caching enabled for each stage. The input
+        dataframe will not be cached.
 
         """
 
-        df = self.stage_results["input_dataframe"]
+        if verbosity:
+            print("Profile with caching:")
 
-        df.cache()
-        df.count()
+        df = self._stage_results["input_dataframe"]
 
-        for identifier, stage in self.stage_dict.items():
+        for identifier, stage in self._stage_mapping.items():
+            if verbosity:
+                print("\tProfile {}".format(identifier))
+
             df = stage.transform(df)
             df.cache()
 
             prof = self._profile_stage(df)
             cache_time = prof["total_time"]
-            self.stage_profiles[identifier]["cached_time"] = cache_time
+            self._stage_profiles[identifier]["cached_time"] = cache_time
 
     def _restore_caching(self):
-        """Unpersist all previously persisted dataframes during profiling
-        and restore original caching properties.
+        """Restore original caching behaviour. Check each stage's `IsCached`
+        parameter and set cache property accordingly.
 
         """
 
-        for identifier, dataset in self.stage_results.items():
+        for identifier, df in self._stage_results.items():
             if identifier == "input_dataframe":
-                dataset.unpersist()
                 continue
 
-            stage = self[identifier]
-
-            try:
-                is_cached = stage.getIsCached()
-            except AttributeError:
-                is_cached = False
-
-            if not is_cached:
-                dataset.unpersist(blocking=True)
+            if self._is_cached(self[identifier]):
+                df.cache()
 
     def _profile_report(self):
         """Prints profile report.
 
         """
 
-        header = "| Idx |    Identifier    | Total time | Partial time |" \
-                 " Cached time | Stage | Shape (rows x cols) |"
-        underline = "+-----+------------------+------------+--------------+" \
-                    "-------------+-------+---------------------+"
-        tpl = "| {idx:^3} | {name:^16} | {total_time:^10} | " \
-              "{partial_time:^12} | {cached_time:^11} | {stage:^5} |" \
-              " {shape:^19} |"
+        lines = [PROF_L, PROF_H, PROF_L]
 
-        print(underline)
-        print(header)
-        print(underline)
+        enumeration = enumerate(self._stage_profiles.items())
+        for idx, (identifier, prof) in enumeration:
+            # format times
+            total_time = fmt_time(prof["total_time"])
+            partial_time = fmt_time(prof["partial_time"])
+            cached_time = fmt_time(prof["cached_time"])
 
-        for idx, (identifier, prof) in enumerate(self.stage_profiles.items()):
+            # shape string
+            shape = "{rows} x {cols}".format(rows=prof['rows'],
+                                             cols=prof['cols'])
 
-            if len(identifier) > 16:
-                identifier = identifier[:13] + "..."
+            # line/body string
+            line = PROF_B.format(idx=idx,
+                                 name=truncate(identifier, 16),
+                                 total_time=total_time,
+                                 partial_time=partial_time,
+                                 cached_time=cached_time,
+                                 stage=prof["stage"],
+                                 shape=shape)
 
-            total_time = pretty_time_duration(prof["total_time"], align=">")
-            partial_time = pretty_time_duration(prof["partial_time"],
-                                                align=">")
-            cached_time = pretty_time_duration(prof["cached_time"], align=">")
-            shape = f"{prof['rows']} x {prof['cols']}"
+            lines.append(line)
 
-            print(tpl.format(idx=idx,
-                             name=identifier,
-                             total_time=total_time,
-                             partial_time=partial_time,
-                             cached_time=cached_time,
-                             stage=prof["stage"],
-                             shape=shape))
-
-        print(underline)
+        lines.append(PROF_L)
+        print(*lines, sep="\n")
 
     def __getitem__(self, value):
-        """Convenient stage access method via location (given integer) or
-        label (given string).
+        """Get stage by index location or label access.
+
+        Index location requires integer value. Label access requires string
+        value.
 
         """
 
@@ -300,64 +367,80 @@ class Pipeline(PipelineModel):
             return self.stages[value]
         elif isinstance(value, str):
             identifier = self._identify_stage(value)
-            return self.stage_dict[identifier]
+            return self._stage_mapping[identifier]
         else:
-            raise ValueError(f"Value has incorrect type '{type(value)}'. "
-                             f"Allowed types are integer and string.")
+            raise ValueError(ERR_TYPE_ACCESS.format(type(value)))
 
     def __call__(self, value):
-        """Convenient stage's dataframe representation access method via
-        location (given integer) or label (given string).
+        """Get stage's dataframe by index location or label access.
+
+        Index location requires integer value. Label access requires string
+        value.
 
         """
 
         self._is_transformed()
 
         if isinstance(value, int):
-            return list(self.stage_results.values())[value]
+            stage_results = self._stage_results.values()
+            return list(stage_results)[value]
         elif isinstance(value, str):
             identifier = self._identify_stage(value)
-            return self.stage_results[identifier]
+            return self._stage_results[identifier]
         else:
-            raise ValueError(f"Value has incorrect type '{type(value)}'. "
-                             f"Allowed types are integer and string.")
+            raise ValueError(ERR_TYPE_ACCESS.format(type(value)))
 
     def _is_transformed(self):
         """Check if pipeline was already run. If not, raise error.
 
         """
 
-        if not self.stage_results:
+        if not self._stage_results:
             raise ValueError(
                 "Pipeline needs to run first via `transform` or parameter "
                 "`df` needs to be supplied.")
 
-    def _identify_stage(self, identifier):
-        """Identify stage by given identifier. Identifier does not need to be
-        a full match. It will catch all stage identifiers which start with
-        given label. If more than one stage identifier matches, raise
-        error.
+    @staticmethod
+    def _is_cached(stage):
+        """Check if given stage has caching enabled or not.
 
         """
 
-        stages = [x for x in self.stage_dict.keys()
+        try:
+            return stage.getIsCached()
+        except AttributeError:
+            return False
+
+    def _identify_stage(self, identifier):
+        """Identify stage by given identifier. Identifier does not need to be
+        a exact match. It will catch all stage identifiers which start with
+        given identifier. If more than one stage matches, raise error because
+        of ambiguity.
+
+        """
+
+        stages = [x for x in self._stage_mapping.keys()
                   if x.startswith(identifier)]
 
         if not stages:
             raise ValueError(
-                f"Stage with identifier `{identifier}` not found. Possible "
-                f"identifiers are {self.stage_dict.keys()}")
+                "Stage with identifier `{identifier}` not found. "
+                "Possible identifiers are {options}."
+                .format(identifier=identifier,
+                        options=self._stage_mapping.keys()))
 
         if len(stages) > 1:
             raise ValueError(
-                f"Identifier is ambiguous. More than one stage "
-                f"identified: {stages}")
+                "Identifier is ambiguous. More than one stage identified: {}"
+                .format(stages))
 
         return stages[0]
 
     @staticmethod
     def _get_execution_stage(df):
-        """Extract execution plan stage from `explain` string.
+        """Extract execution plan stage from `explain` string. Accesses private
+        member of pyspark dataframe and may break in future releases. However,
+        as of yet, there is no other way to access the execution plan stage.
 
         """
 
@@ -369,8 +452,8 @@ class Pipeline(PipelineModel):
             return ""
 
     def _profile_stage(self, df):
-        """Apply `count` on given `df` and return execution time, number of
-        rows and columns.
+        """Profiles dataframe while calling `count` action and return execution
+        time, execution plan stage and number of rows and columns.
 
         """
 
@@ -403,9 +486,9 @@ class Pipeline(PipelineModel):
             return stage.uid
         except AttributeError:
             if inspect.isclass(stage):
-                return f"{stage.__name__}_{id(stage)}"
+                return "{}_{}".format(stage.__name__, id(stage))
             else:
-                return f"{stage.__class__.__name__}_{id(stage)}"
+                return "{}_{}".format(stage.__class__.__name__, id(stage))
 
     @staticmethod
     def _check_convert_transformer(stage):
@@ -420,12 +503,13 @@ class Pipeline(PipelineModel):
                 return stage
             else:
                 raise ValueError(
-                    f"Transform method of stage {stage} is not callable.")
+                    "Transform method of stage {} is not callable."
+                    .format(stage))
 
         elif inspect.isfunction(stage):
             return func_to_spark_transformer(stage)
 
         else:
             raise ValueError(
-                f"Stage '{stage}' needs to implement `transform` method or "
-                f"has to be a function.")
+                "Stage '{}' needs to implement `transform` method or "
+                "has to be a function.".format(stage))
