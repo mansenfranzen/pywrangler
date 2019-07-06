@@ -33,6 +33,8 @@ try:
 except ImportError:
     from pandas.util.testing import assert_frame_equal
 
+pytestmark = pytest.mark.pandas
+
 MARKER_TYPES = {"string": {"start": "start",
                            "end": "end",
                            "noise": "noise"},

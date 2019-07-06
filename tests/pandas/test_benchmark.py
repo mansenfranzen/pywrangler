@@ -16,6 +16,8 @@ from pywrangler.pandas.benchmark import (
     PandasTimeProfiler
 )
 
+pytestmark = pytest.mark.pandas
+
 MIB = 2 ** 20
 
 

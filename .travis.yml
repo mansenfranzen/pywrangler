@@ -3,14 +3,14 @@
 language: python
 
 python:
-  - '3.5'
-  - '3.6'
+#  - '3.5'
+#  - '3.6'
   - '3.7'
 
 env:
   - ENV_STRING=master
 #  - ENV_STRING=pandas0.24.1
-#  - ENV_STRING=pandas0.24.0
+  - ENV_STRING=pandas0.24.0
 #
 #  - ENV_STRING=pandas0.23.4
 #  - ENV_STRING=pandas0.23.3
@@ -32,10 +32,10 @@ env:
 #  - ENV_STRING=pandas0.19.1
 #  - ENV_STRING=pandas0.19.0
 #
-#  - ENV_STRING=pyspark2.4.0
+  - ENV_STRING=pyspark2.4.0
 #  - ENV_STRING=pyspark2.3.1
 
-#  - ENV_STRING=dask1.1.5
+  - ENV_STRING=dask1.1.5
 
 
 # Remove python/pandas version interactions which do not have wheels on pypi
@@ -75,7 +75,7 @@ install:
   - travis_retry pip install coveralls flake8 tox
 
 script:
-  - tox -e $(echo py$TRAVIS_PYTHON_VERSION-$ENV_STRING | tr -d .)
+  - source travisci/tox_invocation.sh
 
 after_success:
   - source travisci/coveralls_master.sh
