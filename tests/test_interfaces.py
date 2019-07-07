@@ -13,9 +13,9 @@ def interval_ident_kwargs():
     return {"marker_column": "marker_col",
             "marker_start": "start",
             "marker_end": "end",
-            "order_columns": ("col1", "col2"),
-            "groupby_columns": ("col3", "col4"),
-            "ascending": (True, False),
+            "order_columns": ["col1", "col2"],
+            "groupby_columns": ["col3", "col4"],
+            "ascending": [True, False],
             "target_column_name": "abc"}
 
 
