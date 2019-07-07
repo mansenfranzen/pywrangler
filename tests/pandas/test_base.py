@@ -31,32 +31,6 @@ def test_pandas_wrangler_validate_output_shape_raises(preserves_sample_size):
 
     if preserves_sample_size:
         with pytest.raises(ValueError):
-            wrangler.validate_output_shape(df1, df2)
+            wrangler._validate_output_shape(df1, df2)
     else:
-        wrangler.validate_output_shape(df1, df2)
-
-
-def test_pandas_wrangler_validate_empty_df_raises():
-    df = pd.DataFrame()
-
-    with pytest.raises(ValueError):
-        PandasWrangler.validate_empty_df(df)
-
-
-def test_pandas_wrangler_validate_empty_df_not_raises():
-    df = pd.DataFrame([0, 0])
-
-    PandasWrangler.validate_empty_df(df)
-
-
-def test_pandas_wrangler_validate_columns_raises():
-    df = pd.DataFrame(columns=["col1", "col2"])
-
-    with pytest.raises(ValueError):
-        PandasWrangler.validate_columns(df, ("col3", "col1"))
-
-
-def test_pandas_wrangler_validate_columns_not_raises():
-    df = pd.DataFrame(columns=["col1", "col2"])
-
-    PandasWrangler.validate_columns(df, ("col1", "col2"))
+        wrangler._validate_output_shape(df1, df2)

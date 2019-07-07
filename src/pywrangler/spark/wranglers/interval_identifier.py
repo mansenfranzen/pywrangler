@@ -5,6 +5,7 @@
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
+from pywrangler.spark import util
 from pywrangler.spark.base import SparkSingleNoFit
 from pywrangler.wranglers import IntervalIdentifier
 
@@ -37,9 +38,9 @@ class VectorizedCumSum(SparkSingleNoFit, IntervalIdentifier):
 
         """
 
-        self.validate_columns(df, self.marker_column)
-        self.validate_columns(df, self.order_columns)
-        self.validate_columns(df, self.groupby_columns)
+        util.validate_columns(df, self.marker_column)
+        util.validate_columns(df, self.order_columns)
+        util.validate_columns(df, self.groupby_columns)
 
         if self.order_columns is None:
             raise ValueError("Please define an order column. Pyspark "
@@ -64,7 +65,7 @@ class VectorizedCumSum(SparkSingleNoFit, IntervalIdentifier):
         self.validate_input(df)
 
         # define window specs
-        orderby = self.prepare_orderby(self.order_columns, self.ascending)
+        orderby = util.prepare_orderby(self.order_columns, self.ascending)
         groupby = self.groupby_columns or []
 
         w_lag = Window.partitionBy(groupby).orderBy(orderby)

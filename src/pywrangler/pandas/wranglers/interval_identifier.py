@@ -6,6 +6,7 @@ from typing import List
 
 import pandas as pd
 
+from pywrangler.pandas import util
 from pywrangler.pandas.base import PandasSingleNoFit
 from pywrangler.wranglers import IntervalIdentifier
 
@@ -33,10 +34,10 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
 
         """
 
-        self.validate_columns(df, self.marker_column)
-        self.validate_columns(df, self.order_columns)
-        self.validate_columns(df, self.groupby_columns)
-        self.validate_empty_df(df)
+        util.validate_columns(df, self.marker_column)
+        util.validate_columns(df, self.order_columns)
+        util.validate_columns(df, self.groupby_columns)
+        util.validate_empty_df(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Extract interval ids from given dataframe.
@@ -56,8 +57,8 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         self.validate_input(df)
 
         # transform
-        df_ordered = self.sort_values(df, self.order_columns, self.ascending)
-        df_grouped = self.groupby(df_ordered, self.groupby_columns)
+        df_ordered = util.sort_values(df, self.order_columns, self.ascending)
+        df_grouped = util.groupby(df_ordered, self.groupby_columns)
 
         df_result = df_grouped[self.marker_column]\
             .transform(self._transform)\
@@ -66,7 +67,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
             .to_frame(self.target_column_name)
 
         # check output
-        self.validate_output_shape(df, df_result)
+        self._validate_output_shape(df, df_result)
 
         return df_result
 
