@@ -15,6 +15,7 @@ from pywrangler.pandas.benchmark import (
     PandasMemoryProfiler,
     PandasTimeProfiler
 )
+from pywrangler.util.testing import concretize_abstract_wrangler
 
 pytestmark = pytest.mark.pandas
 
@@ -52,7 +53,7 @@ def test_wrangler():
                 time.sleep(sleep)
                 return df_out
 
-        return DummyWrangler()
+        return concretize_abstract_wrangler(DummyWrangler)()
 
     return create_wrangler
 

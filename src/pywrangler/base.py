@@ -3,11 +3,13 @@ classes including wrangler descriptions and parameters.
 
 """
 
+from abc import ABC, abstractmethod
+
 from pywrangler.util import _pprint
 from pywrangler.util.helper import get_param_names
 
 
-class BaseWrangler:
+class BaseWrangler(ABC):
     """Defines the basic interface common to all data wranglers.
 
     In analogy to sklearn transformers (see link below), all wranglers have to
@@ -42,10 +44,12 @@ class BaseWrangler:
     """
 
     @property
+    @abstractmethod
     def preserves_sample_size(self) -> bool:
         raise NotImplementedError
 
     @property
+    @abstractmethod
     def computation_engine(self) -> str:
         raise NotImplementedError
 
@@ -91,12 +95,15 @@ class BaseWrangler:
 
         return self
 
+    @abstractmethod
     def fit(self, *args, **kwargs):
         raise NotImplementedError
 
+    @abstractmethod
     def transform(self, *args, **kwargs):
         raise NotImplementedError
 
+    @abstractmethod
     def fit_transform(self, *args, **kwargs):
         raise NotImplementedError
 

@@ -5,9 +5,10 @@
 import pytest
 
 from pywrangler import base
+from pywrangler.util.testing import concretize_abstract_wrangler
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def dummy_wrangler():
     """Create DummyWrangler for testing BaseWrangler.
 
@@ -26,23 +27,26 @@ def dummy_wrangler():
         def computation_engine(self):
             return "DummyEngine"
 
-    return DummyWrangler("arg_val", "kwarg_val")
+    return concretize_abstract_wrangler(DummyWrangler)("arg_val", "kwarg_val")
 
 
 def test_base_wrangler_not_implemented():
 
-    wrangler = base.BaseWrangler()
+    with pytest.raises(TypeError):
+        base.BaseWrangler()
+
+    empty_wrangler = concretize_abstract_wrangler(base.BaseWrangler)()
 
     test_attributes = ("preserves_sample_size", "computation_engine")
     test_methods = ("fit", "transform", "fit_transform")
 
     for test_attribute in test_attributes:
         with pytest.raises(NotImplementedError):
-            getattr(wrangler, test_attribute)
+            getattr(empty_wrangler, test_attribute)
 
     for test_method in test_methods:
         with pytest.raises(NotImplementedError):
-            getattr(wrangler, test_method)()
+            getattr(empty_wrangler, test_method)()
 
 
 def test_base_wrangler_get_params(dummy_wrangler):

@@ -5,10 +5,11 @@
 import pytest
 
 from pywrangler import wranglers
+from pywrangler.util.testing import concretize_abstract_wrangler
 
 
 @pytest.fixture(scope="module")
-def interval_ident_kwargs():
+def ii_kwargs():
 
     return {"marker_column": "marker_col",
             "marker_start": "start",
@@ -19,26 +20,31 @@ def interval_ident_kwargs():
             "target_column_name": "abc"}
 
 
-def test_base_interval_identifier_init(interval_ident_kwargs):
+def test_base_interval_identifier_init(ii_kwargs):
 
-    bii = wranglers.IntervalIdentifier(**interval_ident_kwargs)
+    wrangler = concretize_abstract_wrangler(wranglers.IntervalIdentifier)
+    bii = wrangler(**ii_kwargs)
 
-    assert bii.get_params() == interval_ident_kwargs
+    assert bii.get_params() == ii_kwargs
 
 
-def test_base_interval_identifier_sort_length_exc(interval_ident_kwargs):
+def test_base_interval_identifier_sort_length_exc(ii_kwargs):
 
-    incorrect_length = interval_ident_kwargs.copy()
+    incorrect_length = ii_kwargs.copy()
     incorrect_length["ascending"] = (True, )
 
+    wrangler = concretize_abstract_wrangler(wranglers.IntervalIdentifier)
+
     with pytest.raises(ValueError):
-        wranglers.IntervalIdentifier(**incorrect_length)
+        wrangler(**incorrect_length)
 
 
-def test_base_interval_identifier_sort_keyword_exc(interval_ident_kwargs):
+def test_base_interval_identifier_sort_keyword_exc(ii_kwargs):
 
-    incorrect_keyword = interval_ident_kwargs.copy()
+    incorrect_keyword = ii_kwargs.copy()
     incorrect_keyword["ascending"] = ("wrong keyword", "wrong keyword too")
 
+    wrangler = concretize_abstract_wrangler(wranglers.IntervalIdentifier)
+
     with pytest.raises(ValueError):
-        wranglers.IntervalIdentifier(**incorrect_keyword)
+        wrangler(**incorrect_keyword)

@@ -7,12 +7,13 @@ import pytest
 import pandas as pd
 
 from pywrangler.pandas.base import PandasWrangler
+from pywrangler.util.testing import concretize_abstract_wrangler
 
 pytestmark = pytest.mark.pandas
 
 
 def test_pandas_base_wrangler_engine():
-    wrangler = PandasWrangler()
+    wrangler = concretize_abstract_wrangler(PandasWrangler)()
 
     assert wrangler.computation_engine == "pandas"
 
@@ -24,7 +25,7 @@ def test_pandas_wrangler_validate_output_shape_raises(preserves_sample_size):
         def preserves_sample_size(self):
             return preserves_sample_size
 
-    wrangler = DummyWrangler()
+    wrangler = concretize_abstract_wrangler(DummyWrangler)()
 
     df1 = pd.DataFrame([0] * 10)
     df2 = pd.DataFrame([0] * 20)

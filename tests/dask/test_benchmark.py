@@ -21,6 +21,7 @@ from pywrangler.dask.benchmark import (
     DaskBaseProfiler
 )
 from pywrangler.dask.base import DaskSingleNoFit
+from pywrangler.util.testing import concretize_abstract_wrangler
 
 
 @pytest.fixture
@@ -29,7 +30,7 @@ def mean_wranger():
         def transform(self, df):
             return df.mean()
 
-    return DummyWrangler()
+    return concretize_abstract_wrangler(DummyWrangler)()
 
 
 @pytest.fixture
@@ -66,7 +67,7 @@ def test_wrangler():
                 time.sleep(sleep)
                 return df_out
 
-        return DummyWrangler()
+        return concretize_abstract_wrangler(DummyWrangler)()
 
     return create_wrangler
 

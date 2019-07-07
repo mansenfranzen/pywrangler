@@ -13,6 +13,7 @@ pyspark = pytest.importorskip("pyspark")  # noqa: E402
 from pywrangler.pyspark.base import PySparkSingleNoFit
 from pywrangler.pyspark.benchmark import PySparkTimeProfiler, \
     PySparkBaseProfiler
+from pywrangler.util.testing import concretize_abstract_wrangler
 
 SLEEP = 0.0001
 
@@ -24,7 +25,7 @@ def wrangler_sleeps():
             time.sleep(SLEEP)
             return df
 
-    return DummyWrangler
+    return concretize_abstract_wrangler(DummyWrangler)
 
 
 def test_spark_time_profiler_fastest(spark, wrangler_sleeps):
