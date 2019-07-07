@@ -15,7 +15,8 @@ def test_java_environment():
     communicate with the JVM. Py4J looks for JAVA_HOME or falls back calling
     java directly. This test explicitly checks for the java prerequisites for
     pyspark to work correctly. If errors occur regarding the instantiation of
-    a spark session, this test helps to rule out potential java related causes.
+    a pyspark session, this test helps to rule out potential java related
+    causes.
 
     """
 
@@ -32,7 +33,7 @@ def test_java_environment():
 
 def test_pyspark_import():
     """Fail if pyspark can't be imported. This test is mandatory because other
-    spark tests will be skipped if the spark session fixture fails.
+    pyspark tests will be skipped if the pyspark session fixture fails.
 
     """
 

@@ -1,5 +1,5 @@
 """This module contains utility functions (e.g. validation) commonly used by
-spark wranglers.
+pyspark wranglers.
 
 """
 

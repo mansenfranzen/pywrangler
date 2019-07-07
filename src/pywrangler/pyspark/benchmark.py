@@ -1,6 +1,6 @@
 """This module contains benchmarking utility for pandas wranglers.
 
-TODO: implement SparkMemoryProfiler
+TODO: implement PySparkMemoryProfiler
 
 """
 
@@ -10,17 +10,17 @@ from typing import Callable, Iterable, Union
 from pyspark.sql import DataFrame
 
 from pywrangler.benchmark import TimeProfiler
-from pywrangler.spark.base import SparkWrangler
+from pywrangler.pyspark.base import PySparkWrangler
 
 
-class SparkBaseProfiler:
-    """Define common methods for spark profiler.
+class PySparkBaseProfiler:
+    """Define common methods for pyspark profiler.
 
     """
 
     def _wrap_fit_transform(self) -> Callable:
         """Wrapper function to call `count()` on wrangler's `fit_transform`
-        to enforce computation on lazily evaluated spark dataframes.
+        to enforce computation on lazily evaluated pyspark dataframes.
 
         Returns
         -------
@@ -36,7 +36,7 @@ class SparkBaseProfiler:
 
     @staticmethod
     def _cache_input(dfs: Iterable[DataFrame]):
-        """Persist lazily evaluated spark dataframes before profiling to
+        """Persist lazily evaluated pyspark dataframes before profiling to
         capture only relevant `fit_transform`. Apply `count` to enforce
         computation to create cached representation.
 
@@ -58,12 +58,12 @@ class SparkBaseProfiler:
 
     @staticmethod
     def _clear_cached_input(dfs: Iterable[DataFrame]):
-        """Unpersist previously persisted spark dataframes after profiling.
+        """Unpersist previously persisted pyspark dataframes after profiling.
 
         Parameters
         ----------
         dfs: iterable
-            Persisted spark dataframes.
+            Persisted pyspark dataframes.
 
         """
 
@@ -75,9 +75,9 @@ class SparkBaseProfiler:
                               ResourceWarning)
 
 
-class SparkTimeProfiler(TimeProfiler, SparkBaseProfiler):
-    """Approximate time that a spark wrangler instance requires to execute the
-    `fit_transform` step.
+class PySparkTimeProfiler(TimeProfiler, PySparkBaseProfiler):
+    """Approximate time that a pyspark wrangler instance requires to execute
+    the `fit_transform` step.
 
     Parameters
     ----------
@@ -118,7 +118,7 @@ class SparkTimeProfiler(TimeProfiler, SparkBaseProfiler):
 
     """
 
-    def __init__(self, wrangler: SparkWrangler,
+    def __init__(self, wrangler: PySparkWrangler,
                  repetitions: Union[None, int] = None,
                  cache_input: bool = False):
         self.wrangler = wrangler

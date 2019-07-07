@@ -5,12 +5,12 @@
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
-from pywrangler.spark import util
-from pywrangler.spark.base import SparkSingleNoFit
+from pywrangler.pyspark import util
+from pywrangler.pyspark.base import PySparkSingleNoFit
 from pywrangler.wranglers import IntervalIdentifier
 
 
-class VectorizedCumSum(SparkSingleNoFit, IntervalIdentifier):
+class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
     """Sophisticated approach avoiding python UDFs. However multiple windows
     are necessary.
 

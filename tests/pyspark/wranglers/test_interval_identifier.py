@@ -1,4 +1,4 @@
-"""This module contains tests for spark interval identifier.
+"""This module contains tests for pyspark interval identifier.
 
 isort:skip_file
 """
@@ -11,8 +11,8 @@ import pandas as pd
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
-from pywrangler.spark.wranglers.interval_identifier import VectorizedCumSum
-from pywrangler.spark.testing import assert_spark_pandas_equality
+from pywrangler.pyspark.wranglers.interval_identifier import VectorizedCumSum
+from pywrangler.pyspark.testing import assert_pyspark_pandas_equality
 
 from tests.test_data.interval_identifier import (
     end_marker_begins,
@@ -177,7 +177,7 @@ def test_groupby_order_columns(test_case, wrangler, marker, shuffle,
 
     test_output = wrangler_instance.fit_transform(test_input)
 
-    assert_spark_pandas_equality(test_output, expected)
+    assert_pyspark_pandas_equality(test_output, expected)
 
 
 @pytest.mark.parametrize(**REPARTITION_KWARGS)
@@ -232,4 +232,4 @@ def test_no_groupby_order_columns(test_case, wrangler, groupby_order,
             wrangler_instance.fit_transform(test_input)
     else:
         test_output = wrangler_instance.fit_transform(test_input)
-        assert_spark_pandas_equality(test_output, expected)
+        assert_pyspark_pandas_equality(test_output, expected)

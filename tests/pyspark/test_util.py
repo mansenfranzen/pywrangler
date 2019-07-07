@@ -9,7 +9,7 @@ import pandas as pd
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
-from pywrangler.spark import util
+from pywrangler.pyspark import util
 
 
 def test_spark_wrangler_validate_columns_raises(spark):

@@ -1,4 +1,4 @@
-"""This module contains tests for spark testing utility.
+"""This module contains tests for pyspark testing utility.
 
 isort:skip_file
 """
@@ -9,7 +9,7 @@ import pandas as pd
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
-from pywrangler.spark.testing import assert_spark_pandas_equality
+from pywrangler.pyspark.testing import assert_pyspark_pandas_equality
 
 
 def test_assert_spark_pandas_equality_no_assert(spark):
@@ -23,8 +23,8 @@ def test_assert_spark_pandas_equality_no_assert(spark):
     test_output = test_data.reindex([1, 0])
     test_output = test_output[["b", "c", "a", "d"]]
 
-    assert_spark_pandas_equality(test_input, test_output)
-    assert_spark_pandas_equality(test_input, test_output, orderby=["a"])
+    assert_pyspark_pandas_equality(test_input, test_output)
+    assert_pyspark_pandas_equality(test_input, test_output, orderby=["a"])
 
 
 def test_assert_spark_pandas_equality_assert(spark):
@@ -39,7 +39,7 @@ def test_assert_spark_pandas_equality_assert(spark):
     test_output.iloc[0, 0] = 100
 
     with pytest.raises(AssertionError):
-        assert_spark_pandas_equality(test_input, test_output)
+        assert_pyspark_pandas_equality(test_input, test_output)
 
     with pytest.raises(AssertionError):
-        assert_spark_pandas_equality(test_input, test_output, orderby=["a"])
+        assert_pyspark_pandas_equality(test_input, test_output, orderby=["a"])

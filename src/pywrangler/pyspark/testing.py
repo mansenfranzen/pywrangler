@@ -13,17 +13,17 @@ except ImportError:
     from pandas.util.testing import assert_frame_equal
 
 
-def assert_spark_pandas_equality(df_spark: DataFrame,
-                                 df_pandas: pd.DataFrame,
-                                 orderby: TYPE_COLUMNS = None):
-    """Compare a spark and pandas dataframe in regard to content equality.
-    Spark dataframes do not have a specific index or column order due to their
+def assert_pyspark_pandas_equality(df_spark: DataFrame,
+                                   df_pandas: pd.DataFrame,
+                                   orderby: TYPE_COLUMNS = None):
+    """Compare a pyspark and pandas dataframe in regard to content equality.
+    Pyspark dataframes don't have a specific index or column order due to their
     distributed nature. In contrast, a test for equality for pandas dataframes
     respects index and column order. Therefore, the test for equality between a
-    spark and pandas dataframe will ignore index and column order on purpose.
+    pyspark and pandas dataframe will ignore index and column order on purpose.
 
-    Testing spark dataframes content is most simple while converting to pandas
-    dataframes and having test data as pandas dataframes, too.
+    Testing pyspark dataframes content is most simple while converting to
+    pandas dataframes and having test data as pandas dataframes, too.
 
     To ensure index order is ignored, both dataframes need be sorted by all or
     given columns `orderby`.

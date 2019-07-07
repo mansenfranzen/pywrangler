@@ -24,7 +24,7 @@ class BaseWrangler:
     should contain any logic behind parameter parsing and conversion.
 
     In contrast to sklearn, wranglers do only accept dataframes like objects
-    (like pandas, spark or dask dataframes) as inputs to `fit` and `transform`.
+    (like pandas/pyspark/dask dataframes) as inputs to `fit` and `transform`.
     The relevant columns and their respective meaning is provided via the
     `__init__` method. In addition, wranglers may accept multiple input
     dataframes with different shapes. Also, the number of samples may also
