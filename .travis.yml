@@ -78,6 +78,6 @@ script:
   - source travisci/tox_invocation.sh
 
 after_success:
-  - source travisci/coveralls_master.sh
+  - source travisci/code_coverage.sh
 
 cache: pip

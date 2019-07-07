@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # To test individual pandas/pyspark/dask versions, only corresponding tests
-# need to be run (e.g test pandas 0.19.1, and only run pandas tests while
+# need to be run (e.g test pandas 0.19.2, and only run pandas tests while
 # ignoring all pyspark and dask tests). To achieve this, the corresponding
 # pytest mark is passed to pytest.
 
