@@ -11,4 +11,5 @@
 
 if [[ $ENV_STRING == *"master"* ]]; then
   coveralls --verbose
+  codecov
 fi

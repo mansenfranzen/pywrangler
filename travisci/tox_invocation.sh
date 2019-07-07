@@ -15,4 +15,6 @@ elif [[ $ENV_STRING == *"dask"* ]]; then
   MARKS="-- -m dask"
 fi
 
+MARKS="-- -m pandas"
+
 tox -e $(echo py$TRAVIS_PYTHON_VERSION-$ENV_STRING | tr -d .) $MARKS
