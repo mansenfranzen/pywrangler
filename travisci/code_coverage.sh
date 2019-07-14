@@ -10,5 +10,5 @@
 # code coverage. Non master versions will not be included in code coverage.
 
 if [[ $ENV_STRING == *"master"* ]]; then
-  coveralls --verbose
+   codecov -e $TOXENV
 fi

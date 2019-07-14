@@ -2,11 +2,13 @@
 [run]
 branch = True
 source = pywrangler
-# omit = bad_file.py
+omit =
+    */PyScaffold*.egg/*
+    */pyscaffold/contrib/*
 
 [paths]
 source =
-#    src/
+    #src/
     */site-packages/
 
 [report]
