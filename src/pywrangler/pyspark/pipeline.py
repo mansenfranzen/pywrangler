@@ -9,9 +9,14 @@ from collections import OrderedDict
 import pandas as pd
 from pyspark.ml import PipelineModel, Transformer
 from pyspark.ml.param.shared import Param, Params
+from pyspark.sql import DataFrame
 
 from pywrangler.util._pprint import pretty_time_duration as fmt_time
 from pywrangler.util._pprint import textwrap_docstring, truncate
+
+from typing import Dict, Callable, Optional, Sequence, Union, Any
+
+TYPE_STAGE = Union[Transformer, Any]
 
 REGEX_STAGE = re.compile(r".*?\*\((\d+)\).*")
 
@@ -30,7 +35,7 @@ PROF_B = "| {idx:^3} | {name:^16} | {total_time:^10} | {partial_time:^12} " \
 ERR_TYPE_ACCESS = "Value has incorrect type '{}' (integer or string allowed)."
 
 
-def _create_getter_setter(name):
+def _create_getter_setter(name: str) -> Dict[str, Callable]:
     """Helper function to create getter and setter methods
     for parameters of `Transformer` class for given parameter
     name.
@@ -47,7 +52,7 @@ def _create_getter_setter(name):
             "set{name}".format(name=name): setter}
 
 
-def func_to_spark_transformer(func):
+def func_to_spark_transformer(func: Callable):
     """Convert a native python function into a pyspark `Transformer`
     instance.
 
@@ -127,9 +132,16 @@ class Pipeline(PipelineModel):
     Each pipeline instance may be provided with an explicit documentation
     string.
 
+    Parameters
+    ----------
+    stages: iterable
+        Contains the stages for the pipleline.
+    doc: str, optional
+        Provide optional doc string for the pipeline.
+
     """
 
-    def __init__(self, stages, doc=None):
+    def __init__(self, stages: Sequence, doc: Optional[str]=None):
         """Instantiate pipeline. Convert functions into `Transformer`
         instances if necessary.
 
@@ -158,9 +170,20 @@ class Pipeline(PipelineModel):
         if doc:
             self.__doc__ = doc
 
-    def _transform(self, df):
+    def _transform(self, df: DataFrame) -> DataFrame:
         """Apply stage's `transform` methods in order while storing
         intermediate stage results and respecting optional cache settings.
+
+        Parameters
+        ----------
+        df: pyspark.sql.DataFrame
+            The input dataframe to be transformed.
+
+        Returns
+        -------
+        df: pyspark.sql.DataFrame
+            The final dataframe representation once all stage transformations
+            habe been applied.
 
         """
 
@@ -177,7 +200,7 @@ class Pipeline(PipelineModel):
 
         return df
 
-    def describe(self):
+    def describe(self) -> None:
         """Print description of pipeline while reporting index, identifier,
         number of columns, execution plan stage, cache and doc string of every
         stage in order.
@@ -215,7 +238,7 @@ class Pipeline(PipelineModel):
             # print description
             print(DESC_L, header, DESC_L, *docs, sep="\n")
 
-    def profile(self, verbosity=None):
+    def profile(self, verbose: bool=False) -> None:
         """Profiles each stage of the pipeline with and without caching
         enabled. Total, partial and cache times are reported. Partial time is
         computed as the current total time minus the previous total time. If
@@ -230,25 +253,39 @@ class Pipeline(PipelineModel):
         input data because it will call an action on each stage twice and it
         will cache each stage's result temporarily.
 
+        Parameters
+        ----------
+        verbose: bool, optional
+            Enable verbose information about current state.
+
+        Returns
+        -------
+        None, but prints profile report.
+
         """
 
         self._is_transformed()
         self._stage_profiles.clear()
 
-        self._unpersist_dataframes(verbosity)
-        self._profile_without_caching(verbosity)
-        self._profile_with_caching(verbosity)
-        self._unpersist_dataframes(verbosity)
+        self._unpersist_dataframes(verbose)
+        self._profile_without_caching(verbose)
+        self._profile_with_caching(verbose)
+        self._unpersist_dataframes(verbose)
 
         self._restore_caching()
         self._profile_report()
 
-    def _unpersist_dataframes(self, verbosity=None):
+    def _unpersist_dataframes(self, verbose=None):
         """Unpersists all dataframe representations except input dataframe.
+
+        Parameters
+        ----------
+        verbose: bool, optional
+            Enable verbose information about current state.
 
         """
 
-        if verbosity:
+        if verbose:
             print("Unpersisting all dataframes.")
 
         for identifier, df in self._stage_results.items():
@@ -257,13 +294,18 @@ class Pipeline(PipelineModel):
 
             df.unpersist(blocking=True)
 
-    def _profile_without_caching(self, verbosity=None):
+    def _profile_without_caching(self, verbose: bool=None) -> None:
         """Make profile without caching enabled. Store total and partial time,
         counts and execution plan stage.
 
+        Parameters
+        ----------
+        verbose: bool, optional
+            Enable verbose information about current state.
+
         """
 
-        if verbosity:
+        if verbose:
             print("Profile without caching:\n\tProfile input dataframe")
 
         # profile initial stage
@@ -277,7 +319,7 @@ class Pipeline(PipelineModel):
         temp_total_time = prof["total_time"]
 
         for identifier, stage in self._stage_mapping.items():
-            if verbosity:
+            if verbose:
                 print("\tProfile {}".format(identifier))
 
             df = stage.transform(df)
@@ -288,19 +330,24 @@ class Pipeline(PipelineModel):
 
             temp_total_time = prof["total_time"]
 
-    def _profile_with_caching(self, verbosity=None):
+    def _profile_with_caching(self, verbose: bool=None) -> None:
         """Make profile with caching enabled for each stage. The input
         dataframe will not be cached.
 
+        Parameters
+        ----------
+        verbose: bool, optional
+            Enable verbose information about current state.
+
         """
 
-        if verbosity:
+        if verbose:
             print("Profile with caching:")
 
         df = self._stage_results["input_dataframe"]
 
         for identifier, stage in self._stage_mapping.items():
-            if verbosity:
+            if verbose:
                 print("\tProfile {}".format(identifier))
 
             df = stage.transform(df)
@@ -310,7 +357,7 @@ class Pipeline(PipelineModel):
             cache_time = prof["total_time"]
             self._stage_profiles[identifier]["cached_time"] = cache_time
 
-    def _restore_caching(self):
+    def _restore_caching(self) -> None:
         """Restore original caching behaviour. Check each stage's `IsCached`
         parameter and set cache property accordingly.
 
@@ -323,8 +370,8 @@ class Pipeline(PipelineModel):
             if self._is_cached(self[identifier]):
                 df.cache()
 
-    def _profile_report(self):
-        """Prints profile report.
+    def _profile_report(self) -> None:
+        """Collects all profiling information and prints profile report.
 
         """
 
@@ -355,11 +402,20 @@ class Pipeline(PipelineModel):
         lines.append(PROF_L)
         print(*lines, sep="\n")
 
-    def __getitem__(self, value):
+    def __getitem__(self, value: Union[str, int]) -> TYPE_STAGE:
         """Get stage by index location or label access.
 
         Index location requires integer value. Label access requires string
         value.
+
+        Parameters
+        ----------
+        value: str, int
+            Integer for index location or string for label access of stages.
+
+        Returns
+        -------
+        stage: pyspark.ml.Transformer
 
         """
 
@@ -371,11 +427,21 @@ class Pipeline(PipelineModel):
         else:
             raise ValueError(ERR_TYPE_ACCESS.format(type(value)))
 
-    def __call__(self, value):
+    def __call__(self, value: Union[str, int]) -> DataFrame:
         """Get stage's dataframe by index location or label access.
 
         Index location requires integer value. Label access requires string
         value.
+
+        Parameters
+        ----------
+        value: str, int
+            Integer for index location or string for label access of stages.
+
+        Returns
+        -------
+        df: pyspark.sql.DataFrame
+            The dataframe representation of the stage.
 
         """
 
@@ -390,7 +456,7 @@ class Pipeline(PipelineModel):
         else:
             raise ValueError(ERR_TYPE_ACCESS.format(type(value)))
 
-    def _is_transformed(self):
+    def _is_transformed(self) -> None:
         """Check if pipeline was already run. If not, raise error.
 
         """
@@ -401,8 +467,17 @@ class Pipeline(PipelineModel):
                 "`df` needs to be supplied.")
 
     @staticmethod
-    def _is_cached(stage):
-        """Check if given stage has caching enabled or not.
+    def _is_cached(stage: TYPE_STAGE) -> bool:
+        """Check if given stage has caching enabled or not via `getIsCached`.
+
+        Parameters
+        ----------
+        stage: pyspark.ml.Transformer
+            The stage to check caching for.
+
+        Returns
+        -------
+        is_cached: bool
 
         """
 
@@ -411,11 +486,21 @@ class Pipeline(PipelineModel):
         except AttributeError:
             return False
 
-    def _identify_stage(self, identifier):
+    def _identify_stage(self, identifier: str) -> str:
         """Identify stage by given identifier. Identifier does not need to be
         a exact match. It will catch all stage identifiers which start with
         given identifier. If more than one stage matches, raise error because
         of ambiguity.
+
+        Parameters
+        ----------
+        identifier: str
+            Identifier to match against all stage identifiers.
+
+        Returns
+        -------
+        stage_identifier: str
+            Full identifier for selected stage.
 
         """
 
@@ -437,10 +522,22 @@ class Pipeline(PipelineModel):
         return stages[0]
 
     @staticmethod
-    def _get_execution_stage(df):
+    def _get_execution_stage(df: DataFrame) -> str:
         """Extract execution plan stage from `explain` string. Accesses private
         member of pyspark dataframe and may break in future releases. However,
         as of yet, there is no other way to access the execution plan stage.
+
+        Parameters
+        ----------
+        df: pyspark.sql.DataFrame
+            Pyspark dataframe for which the current execution plan stage will
+            be extracted.
+
+        Returns
+        -------
+        stage: str
+
+        ToDo: caching causes stages to restart from 0 which needs be evaluated
 
         """
 
@@ -451,9 +548,20 @@ class Pipeline(PipelineModel):
         else:
             return ""
 
-    def _profile_stage(self, df):
+    def _profile_stage(self, df: DataFrame) -> Dict[str, Union[str, float]]:
         """Profiles dataframe while calling `count` action and return execution
         time, execution plan stage and number of rows and columns.
+
+        Parameters
+        ----------
+        df: pyspark.sql.DataFrame
+            Pyspark dataframe to be profiled.
+
+        Returns
+        -------
+        profile: dict
+            Profile results containing `total_time`, `rows`, `cols` and
+            `stage`.
 
         """
 
@@ -475,10 +583,19 @@ class Pipeline(PipelineModel):
                 "stage": stage}
 
     @staticmethod
-    def _create_stage_identifier(stage):
+    def _create_stage_identifier(stage: TYPE_STAGE) -> str:
         """Given different types of stages, create a unique identifier for
         each stage. Valid pyspark `Transformer` have an uid. Other objects
         will use class name and id.
+
+        Parameters
+        ----------
+        stage: pyspark.ml.Transformer
+            A stage for which a uniqe identifier is returned.
+
+        Returns
+        -------
+        identifier: str
 
         """
 
@@ -491,10 +608,23 @@ class Pipeline(PipelineModel):
                 return "{}_{}".format(stage.__class__.__name__, id(stage))
 
     @staticmethod
-    def _check_convert_transformer(stage):
+    def _check_convert_transformer(stage: Any) -> TYPE_STAGE:
         """Ensure given stage is suitable for pipeline usage while checking
         for `transform` attribute. If not and stage is a function, convert
         into `Transformer` instance.
+
+        Parameters
+        ----------
+        stage: Any
+            Any object viable to serve as a transformer.
+
+        Returns
+        -------
+        converted: pyspark.ml.Transformer
+            Object with a `transform` method.
+
+        ToDo: Add conversion for pywrangler.pyspark instances
+        ToDo: Allow only Transformer, Wrangler, functions
 
         """
 
