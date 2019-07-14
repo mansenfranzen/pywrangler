@@ -5,8 +5,8 @@ pywrangler
 .. image:: https://travis-ci.org/mansenfranzen/pywrangler.svg?branch=master
     :target: https://travis-ci.org/mansenfranzen/pywrangler
 
-.. image:: https://coveralls.io/repos/github/mansenfranzen/pywrangler/badge.svg?branch=master
-    :target: https://coveralls.io/github/mansenfranzen/pywrangler?branch=master
+.. image:: https://codecov.io/gh/mansenfranzen/pywrangler/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/mansenfranzen/pywrangler
 
 .. image:: https://badge.fury.io/gh/mansenfranzen%2Fpywrangler.svg
     :target: https://badge.fury.io/gh/mansenfranzen%2Fpywrangler
