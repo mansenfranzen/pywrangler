@@ -2,10 +2,12 @@
 
 """
 
+import copy
 import inspect
 import re
 from collections import OrderedDict
-import copy
+from collections.abc import KeysView
+from typing import Any, Callable, Dict, Optional, Sequence, Union
 
 import pandas as pd
 from pyspark.ml import PipelineModel, Transformer
@@ -15,9 +17,6 @@ from pyspark.sql import DataFrame
 from pywrangler.pyspark.base import PySparkWrangler
 from pywrangler.util._pprint import pretty_time_duration as fmt_time
 from pywrangler.util._pprint import textwrap_docstring, truncate
-
-from typing import Dict, Callable, Optional, Sequence, Union, Any, cast
-from collections.abc import KeysView
 
 # types
 TYPE_PARAM_DICT = Dict[str, Union[Callable, Param]]
@@ -161,7 +160,7 @@ def wrangler_to_spark_transformer(wrangler: PySparkWrangler) -> Transformer:
         return self._wrangler.transform(df)
 
     cls_name = wrangler.__class__.__name__
-    cls_dict = {"_wranlger": copy.deepcopy(wrangler),
+    cls_dict = {"_wrangler": copy.deepcopy(wrangler),
                 "_transform": _transform,
                 "__doc__": wrangler.__doc__}
 
@@ -201,7 +200,7 @@ def func_to_spark_transformer(func: Callable) -> Transformer:
         return self._func(df, **self.getParams())
 
     cls_name = func.__name__
-    cls_dict = {"_func": func,
+    cls_dict = {"_func": staticmethod(func),
                 "_transform": _transform,
                 "__doc__": func.__doc__}
 
@@ -621,13 +620,13 @@ class Pipeline(PipelineModel):
             raise ValueError(
                 "Stage with identifier `{identifier}` not found. "
                 "Possible identifiers are {options}."
-                    .format(identifier=identifier,
-                            options=self._stage_mapping.keys()))
+                .format(identifier=identifier,
+                        options=self._stage_mapping.keys()))
 
         if len(stages) > 1:
             raise ValueError(
                 "Identifier is ambiguous. More than one stage identified: {}"
-                    .format(stages))
+                .format(stages))
 
         return stages[0]
 
@@ -722,4 +721,4 @@ class Pipeline(PipelineModel):
             raise ValueError(
                 "Stage needs to be a `Transformer`, `PySparkWrangler` "
                 "or a native python function. However, '{}' was given."
-                    .format(type(stage)))
+                .format(type(stage)))
