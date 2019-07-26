@@ -57,9 +57,19 @@ def _create_getter_setter(name: str) -> Dict[str, Callable]:
     """
 
     def setter(self, value):
+        """Using the `self._set` is the default implementation for setting
+        user-supplied params for `Transformer`
+
+        """
+
         return self._set(**{name: value})
 
     def getter(self):
+        """Passing the `Param` value of the parameter to `getOrDefault` is the
+        default implementation of `Transformer`.
+
+        """
+
         return self.getOrDefault(getattr(self, name))
 
     return {"get{name}".format(name=name): getter,
@@ -101,20 +111,20 @@ def _create_param_dict(parameters: KeysView) -> TYPE_PARAM_DICT:
     return param_dict
 
 
-def _instantiate_transformer(cls_name: str,
-                             cls_dict: Dict[str, Any],
-                             cls_params: Dict[str, Any]) -> Transformer:
+def _instantiate_transformer(name: str,
+                             dicts: Dict[str, Any],
+                             params: Dict[str, Any]) -> Transformer:
     """Create subclass of `pyspark.ml.Transformer` during runtime with name
-    `cls_name` and methods/attributes `cls_dict`. Create instance of it and
-    configure it with given parameters `cls_params`.
+    `name` and methods/attributes `dicts`. Create instance of it and
+    configure it with given parameters `params`.
 
     Parameters
     ----------
-    cls_name: str
+    name: str
         Name of the class.
-    cls_dict: Dict[str, Any]
+    dicts: Dict[str, Any]
         All methods/attributes of the class.
-    cls_params: Dict[str, Any]
+    params: Dict[str, Any]
         All parameters to be set for a new instance of this class.
 
     Returns
@@ -123,9 +133,9 @@ def _instantiate_transformer(cls_name: str,
 
     """
 
-    transformer_class = type(cls_name, (Transformer,), cls_dict)
+    transformer_class = type(name, (Transformer,), dicts)
     transformer_instance = transformer_class()
-    transformer_instance._set(**cls_params)
+    transformer_instance._set(**params)
 
     return transformer_instance
 
@@ -217,27 +227,20 @@ def func_to_spark_transformer(func: Callable) -> Transformer:
 
 
 class Pipeline(PipelineModel):
-    """Represents a compiled pipeline with transformers and fitted models.
+    """Represents an extended subclass of `pyspark.ml.PipelineModel` which adds
+    several convenient features for more general ETL purposes. Concretely, it
+    allows to use pyspark wranglers and native python functions as transformers
+    that resemble a valid data transformation stage. To comply with the
+    `pyspark.ml.Transformer` interface, pyspark wrangler and python functions
+    are automatically converted into valid `Transformer` instances. Keyword
+    arguments of python functions and configuration of pyspark wranglers will
+    be available as normal parameters of the resulting pyspark `Transformer`.
 
-    This subclass of `PipelineModel` adds several convenient features to
-    extend its usage for normal ETL pipelines. More specifically, it
-    enables the user to add native python functions that resemble a valid
-    data transformation step while automatically converting python functions
-    into valid `Transformer` instances. Transformer functions only require
-    to have the first parameter represent the input dataframe. Keyword
-    arguments will be available as normal parameters of the resulting pyspark
-    `Transformer`.
-
-    In addition, the `_transform` method checks for an optionally defined
-    `IsCached` parameter to cache intermediate results for each stage. This
-    enables the possibility to cache specific stages. The `describe` method
-    gives a brief overview of the stages. The `profile` method allows to get
-    detailed timings and provides indicators for possible caching benefits for
-    each stage.
-
-    Also, `__call__` is implemented to conveniently access dataframe
-    representations for each stage and `__getitem__` allows to access
-    stage representation.
+    In addition, the `describe` method gives a brief overview of the stages.
+    The `profile` method provides timings and shapes of each stage. Also,
+    `__call__` is implemented to conveniently access the resulting dataframe
+    representation of each stage while `__getitem__` allows to access the
+    `Transformer` instance of each stage.
 
     Each pipeline instance may be provided with an explicit documentation
     string.
@@ -711,7 +714,7 @@ class Pipeline(PipelineModel):
         """
 
         if isinstance(stage, Transformer):
-            return Transformer
+            return stage
         elif isinstance(stage, PySparkWrangler):
             return wrangler_to_spark_transformer(stage)
         elif inspect.isfunction(stage):
