@@ -40,4 +40,7 @@ def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
         def transform(self, *args, **kwargs):
             return super().transform(*args, **kwargs)
 
+    ConcreteWrangler.__name__ = wrangler_class.__name__
+    ConcreteWrangler.__doc__ = wrangler_class.__doc__
+
     return ConcreteWrangler
