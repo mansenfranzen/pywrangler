@@ -29,191 +29,223 @@ StageProfile = NamedTuple("StageProfile", [("idx", int),
 ERR_TYPE_ACCESS = "Value has incorrect type '{}' (integer or string allowed)."
 
 
-def _create_getter_setter(name: str) -> Dict[str, Callable]:
-    """Helper function to create getter and setter methods
-    for parameters of `Transformer` class for given parameter
-    name.
+class StageTransformerConverter:
+    """Wrap arbitrary pipeline stage object and allow conversion to a valid
+    pyspark `Transformer` to comply with pyspark's pipeline/transformer API.
 
-    Parameters
-    ----------
-    name: str
-        The name of the parameter.
-
-    Returns
-    -------
-    param_dict: Dict[str, Callable]
-        Dictionary containing the getter/setter methods for single parameter.
+    Accepts instances of type `Transformer`, `Wrangler` and native python
+    functions.
 
     """
 
-    def setter(self, value):
-        """Using the `self._set` is the default implementation for setting
-        user-supplied params for `Transformer`
+    def __init__(self, stage):
+        """Create reference of stage object.
+
+        Parameters
+        ----------
+        stage: Any
+            Arbitrary pipeline stage object.
 
         """
 
-        return self._set(**{name: value})
+        self.stage = stage
 
-    def getter(self):
-        """Passing the `Param` value of the parameter to `getOrDefault` is the
-        default implementation of `Transformer`.
+    def convert(self) -> Transformer:
+        """Ensure stage is suitable for pipeline usage while allowing
+        only instances of type `Transformer`, `Wrangler` or native python
+        functions. Objects which are not of type `Transformer` will be
+        converted into it.
+
+        Returns
+        -------
+        converted: pyspark.ml.Transformer
+            Object with a `transform` method.
 
         """
 
-        return self.getOrDefault(getattr(self, name))
+        if isinstance(self.stage, Transformer):
+            return self.stage
+        elif isinstance(self.stage, PySparkWrangler):
+            return self.convert_wrangler()
+        elif inspect.isfunction(self.stage):
+            return self.convert_function()
 
-    return {"get{name}".format(name=name): getter,
-            "set{name}".format(name=name): setter}
+        else:
+            raise ValueError(
+                "Stage needs to be a `Transformer`, `PySparkWrangler` "
+                "or a native python function. However, '{}' was given."
+                .format(type(self.stage)))
 
+    def convert_wrangler(self) -> Transformer:
+        """Convert a `PySparkWrangler` into a pyspark `Transformer`.
 
-def _create_param_dict(parameters: KeysView) -> TYPE_PARAM_DICT:
-    """Create getter/setter methods and Param attributes for given parameters
-    to comply `pyspark.ml.Transformer` API.
+        Creates a deep copy of the original wrangler instance to leave it
+        unchanged. The original API is lost and the pyspark `Transformer` API
+        applies.
 
-    Parameters
-    ----------
-    parameters: KeysView
-        Contains the names of the parameters.
+        Temporarily creates a new sublcass of type `Transformer` during
+        runtime while ensuring that all keyword arguments of the wrangler
+        are mapped to corresponding `Param` identifiers with required getter
+        and setter methods for the resulting `Transformer` class.
 
-    Returns
-    -------
-    param_dict: Dict[str, Union[Callable, Param]]
-        Dictionary containing the parameter setter/getter and Param attributes.
+        Returns
+        -------
+        transformer: pyspark.ml.Transformer
 
-    """
+        """
 
-    def setParams(self, **kwargs):
-        return self._set(**kwargs)
+        def _transform(self, df):
+            self._wrangler.set_params(**self.getParams())
+            return self._wrangler.transform(df)
 
-    def getParams(self):
-        params = self.extractParamMap().items()
-        kwargs = {key.name: value for key, value in params}
-        return kwargs
+        cls_name = self.stage.__class__.__name__
+        cls_dict = {"_wrangler": copy.deepcopy(self.stage),
+                    "_transform": _transform,
+                    "__doc__": self.stage.__doc__}
 
-    param_dict = {"setParams": setParams,
-                  "getParams": getParams}
+        # get parameters
+        params = self.stage.get_params()
+        params_dict = self._create_param_dict(params.keys())
+        cls_dict.update(params_dict)
 
-    # create setter/getter and Param instances
-    for parameter in parameters:
-        param_dict.update(_create_getter_setter(parameter))
-        param_dict[parameter] = Param(Params._dummy(), parameter, "")
+        return self._instantiate_transformer(cls_name, cls_dict, params)
 
-    return param_dict
+    def convert_function(self) -> Transformer:
+        """Convert a native python function into a pyspark `Transformer`
+        instance. Expects the first parameter to be positional representing the
+        input dataframe.
 
+        Temporarily creates a new sublcass of type `Transformer` during
+        runtime while ensuring that all keyword arguments of the input
+        function are mapped to corresponding `Param` identifiers with
+        required getter and setter methods for the resulting `Transformer`
+        class.
 
-def _instantiate_transformer(name: str,
-                             dicts: Dict[str, Any],
-                             params: Dict[str, Any]) -> Transformer:
-    """Create subclass of `pyspark.ml.Transformer` during runtime with name
-    `name` and methods/attributes `dicts`. Create instance of it and
-    configure it with given parameters `params`.
+        Returns
+        -------
+        transformer: pyspark.ml.Transformer
 
-    Parameters
-    ----------
-    name: str
-        Name of the class.
-    dicts: Dict[str, Any]
-        All methods/attributes of the class.
-    params: Dict[str, Any]
-        All parameters to be set for a new instance of this class.
+        """
 
-    Returns
-    -------
-    transformer_instance: Transformer
+        def _transform(self, df):
+            return self._func(df, **self.getParams())
 
-    """
+        cls_name = self.stage.__name__
+        cls_dict = {"_func": staticmethod(self.stage),
+                    "_transform": _transform,
+                    "__doc__": self.stage.__doc__}
 
-    transformer_class = type(name, (Transformer,), dicts)
-    transformer_instance = transformer_class()
-    transformer_instance._set(**params)
+        # get parameters
+        signature = inspect.signature(self.stage)
+        params = signature.parameters.values()
+        params = {x.name: x.default for x in params
+                  if not x.default == inspect._empty}
 
-    return transformer_instance
+        params_dict = self._create_param_dict(params.keys())
+        cls_dict.update(params_dict)
 
+        return self._instantiate_transformer(cls_name, cls_dict, params)
 
-def wrangler_to_spark_transformer(wrangler: PySparkWrangler) -> Transformer:
-    """Convert a `PySparkWrangler` into a pyspark `Transformer`.
+    def _create_param_dict(self, parameters: KeysView) -> TYPE_PARAM_DICT:
+        """Create getter/setter methods and Param attributes for given
+        parameters to comply `pyspark.ml.Transformer` API.
 
-    Creates a deep copy of the original wrangler instance to leave it
-    unchanged. The original API is lost and the pyspark `Transformer` API
-    applies.
+        Parameters
+        ----------
+        parameters: KeysView
+            Contains the names of the parameters.
 
-    Temporarily creates a new sublcass of type `Transformer` during
-    runtime while ensuring that all keyword arguments of the wrangler
-    are mapped to corresponding `Param` identifiers with required getter and
-    setter methods for the resulting `Transformer` class.
+        Returns
+        -------
+        param_dict: Dict[str, Union[Callable, Param]]
+            Dictionary containing the parameter setter/getter and Param
+            attributes.
 
-    Returns an instance of the temporarily create `Transformer` subclass.
+        """
 
-    Parameters
-    ----------
-    wrangler: PySparkWrangler
-        Instance of a pyspark wrangler.
+        def setParams(self, **kwargs):
+            return self._set(**kwargs)
 
-    Returns
-    -------
-    _transformer: pyspark.ml.Transformer
+        def getParams(self):
+            params = self.extractParamMap().items()
+            kwargs = {key.name: value for key, value in params}
+            return kwargs
 
-    """
+        param_dict = {"setParams": setParams,
+                      "getParams": getParams}
 
-    def _transform(self, df):
-        self._wrangler.set_params(**self.getParams())
-        return self._wrangler.transform(df)
+        # create setter/getter and Param instances
+        for parameter in parameters:
+            param_dict.update(self._create_getter_setter(parameter))
+            param_dict[parameter] = Param(Params._dummy(), parameter, "")
 
-    cls_name = wrangler.__class__.__name__
-    cls_dict = {"_wrangler": copy.deepcopy(wrangler),
-                "_transform": _transform,
-                "__doc__": wrangler.__doc__}
+        return param_dict
 
-    # get parameters
-    params = wrangler.get_params()
-    params_dict = _create_param_dict(params.keys())
-    cls_dict.update(params_dict)
+    @staticmethod
+    def _instantiate_transformer(name: str,
+                                 dicts: Dict[str, Any],
+                                 params: Dict[str, Any]) -> Transformer:
+        """Create subclass of `pyspark.ml.Transformer` during runtime with name
+        `name` and methods/attributes `dicts`. Create instance of it and
+        configure it with given parameters `params`.
 
-    return _instantiate_transformer(cls_name, cls_dict, params)
+        Parameters
+        ----------
+        name: str
+            Name of the class.
+        dicts: Dict[str, Any]
+            All methods/attributes of the class.
+        params: Dict[str, Any]
+            All parameters to be set for a new instance of this class.
 
+        Returns
+        -------
+        transformer_instance: Transformer
 
-def func_to_spark_transformer(func: Callable) -> Transformer:
-    """Convert a native python function into a pyspark `Transformer`
-    instance. Expects the first parameter to be positional representing the
-    input dataframe.
+        """
 
-    Temporarily creates a new sublcass of type `Transformer` during
-    runtime while ensuring that all keyword arguments of the input
-    function are mapped to corresponding `Param` identifiers with
-    required getter and setter methods for the resulting `Transformer`
-    class.
+        transformer_class = type(name, (Transformer,), dicts)
+        transformer_instance = transformer_class()
+        transformer_instance._set(**params)
 
-    Returns an instance of the temporarily create `Transformer` subclass.
+        return transformer_instance
 
-    Parameters
-    ----------
-    func: Callable
-        Native python function.
+    @staticmethod
+    def _create_getter_setter(name: str) -> Dict[str, Callable]:
+        """Helper function to create getter and setter methods for parameters
+        of `Transformer` class for given parameter name.
 
-    Returns
-    -------
-    _transformer: pyspark.ml.Transformer
+        Parameters
+        ----------
+        name: str
+            The name of the parameter.
 
-    """
+        Returns
+        -------
+        param_dict: Dict[str, Callable]
+            Dictionary containing the getter/setter methods for single
+            parameter.
 
-    def _transform(self, df):
-        return self._func(df, **self.getParams())
+        """
 
-    cls_name = func.__name__
-    cls_dict = {"_func": staticmethod(func),
-                "_transform": _transform,
-                "__doc__": func.__doc__}
+        def setter(self, value):
+            """Using the `self._set` is the default implementation for setting
+            user-supplied params for `Transformer`
 
-    # get parameters
-    signature = inspect.signature(func)
-    params = signature.parameters.values()
-    params = {x.name: x.default for x in params
-              if not x.default == inspect._empty}
+            """
 
-    params_dict = _create_param_dict(params.keys())
-    cls_dict.update(params_dict)
+            return self._set(**{name: value})
 
-    return _instantiate_transformer(cls_name, cls_dict, params)
+        def getter(self):
+            """Passing the `Param` value of the parameter to `getOrDefault` is
+            the default implementation of `Transformer`.
+
+            """
+
+            return self.getOrDefault(getattr(self, name))
+
+        return {"get{name}".format(name=name): getter,
+                "set{name}".format(name=name): setter}
 
 
 class PipelineLocator:
@@ -351,7 +383,7 @@ class PipelineLocator:
         """
 
         idx = self.get_index_location(value)
-        return self.pipeline.stage[idx]
+        return self.pipeline.stages[idx]
 
     def get_transformation(self, value):
         """Return pipeline stage's transformation for given index or
@@ -411,6 +443,11 @@ class PipelineCacher:
         """Enable pipeline caching for given stages. Stage can be identified
         via index, identifier or stage itself.
 
+        If pipeline was already transformed, enables caching on existing
+        dataframe representations. However, `transform` has to be called again
+        for the execution plan of the pipeline's result dataframe to respect
+        caching changes.
+
         Parameters
         ----------
         stages: iterable
@@ -424,9 +461,17 @@ class PipelineCacher:
             idx = self.pipeline._loc.get_index_location(stage)
             self._store.add(idx)
 
+            if self.pipeline._transformer:
+                self.pipeline(idx).cache()
+
     def disable(self, stages):
-        """Disable pipeline caching for given stages. Stage can be  identified
+        """Disable pipeline caching for given stages. Stage can be identified
         via index, identifier or stage itself.
+
+        If pipeline was already transformed, disables caching on existing
+        dataframe representations. However, `transform` has to be called again
+        for the execution plan of the pipeline's result dataframe to respect
+        caching changes.
 
         Parameters
         ----------
@@ -439,7 +484,15 @@ class PipelineCacher:
 
         for stage in stages:
             idx = self.pipeline._loc.get_index_location(stage)
-            self._store.remove(idx)
+
+            try:
+                self._store.remove(idx)
+            except KeyError:
+                raise ValueError("'{}' does not exist in cache and hence"
+                                 "cannot be disabled.".format(stage))
+
+            if self.pipeline._transformer:
+                self.pipeline(idx).unpersist(blocking=True)
 
     def clear(self):
         """Remove all stage caches on pipeline level.
@@ -730,23 +783,26 @@ class Pipeline(PipelineModel):
 
     Examples
     --------
-    >>>
 
     """
 
     def __init__(self, stages, doc=None):
-        """Instantiate pipeline. Convert functions into `Transformer`
-        instances if necessary.
+        """Instantiate pipeline. Validate/convert stage input.
 
         """
 
-        converted = [self._prepare_stage(stage) for stage in stages]
+        converted = [StageTransformerConverter(stage).convert()
+                     for stage in stages]
+
         super().__init__(tuple(converted))
 
-        self._loc = PipelineLocator(self)
-        self._transformer = PipelineTransformer(self)
+        # public
         self.cache = PipelineCacher(self)
         self.doc = doc
+
+        # private
+        self._loc = PipelineLocator(self)
+        self._transformer = PipelineTransformer(self)
 
     def profile(self, df=None):
         """Executes each stage in order and collects information about
@@ -823,35 +879,3 @@ class Pipeline(PipelineModel):
 
         """
         return self._loc.get_transformation(value)
-
-    @staticmethod
-    def _prepare_stage(stage: Any) -> Transformer:
-        """Ensure given stage is suitable for pipeline usage while allowing
-        only instances of type `Transformer`, `Wrangler` or native python
-        functions. Objects which are not of type `Transformer` will be
-        converted into it.
-
-        Parameters
-        ----------
-        stage: Any
-            Any object viable to serve as a _transformer.
-
-        Returns
-        -------
-        converted: pyspark.ml.Transformer
-            Object with a `transform` method.
-
-        """
-
-        if isinstance(stage, Transformer):
-            return stage
-        elif isinstance(stage, PySparkWrangler):
-            return wrangler_to_spark_transformer(stage)
-        elif inspect.isfunction(stage):
-            return func_to_spark_transformer(stage)
-
-        else:
-            raise ValueError(
-                "Stage needs to be a `Transformer`, `PySparkWrangler` "
-                "or a native python function. However, '{}' was given."
-                .format(type(stage)))
