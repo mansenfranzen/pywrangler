@@ -6,16 +6,29 @@ import copy
 import inspect
 import re
 from collections.abc import KeysView
-from typing import Any, Callable, Dict, NamedTuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union
+)
 
 import numpy as np
 import pandas as pd
 from pyspark.ml import PipelineModel, Transformer
 from pyspark.ml.param.shared import Param, Params
+from pyspark.sql import DataFrame
 
 from pywrangler.pyspark.base import PySparkWrangler
 from pywrangler.util.sanitizer import ensure_iterable
 
+TYPE_STAGE = Union[PySparkWrangler, Transformer, Callable]
+TYPE_IDENTIFIER = Union[int, str, Transformer]
 TYPE_PARAM_DICT = Dict[str, Union[Callable, Param]]
 
 StageProfile = NamedTuple("StageProfile", [("idx", int),
@@ -38,7 +51,7 @@ class StageTransformerConverter:
 
     """
 
-    def __init__(self, stage):
+    def __init__(self, stage: TYPE_STAGE):
         """Create reference of stage object.
 
         Parameters
@@ -257,7 +270,7 @@ class PipelineLocator:
 
     """
 
-    def __init__(self, pipeline):
+    def __init__(self, pipeline: 'Pipeline'):
         """Pipeline locator keeps track of stage's identifier-idx mapping via
         `self.identifiers`.
 
@@ -273,7 +286,7 @@ class PipelineLocator:
         enumerated = enumerate(self.pipeline.stages)
         self.identifiers = {stage.uid: idx for idx, stage in enumerated}
 
-    def map_identifier_to_index(self, identifier):
+    def map_identifier_to_index(self, identifier: str) -> int:
         """Find corresponding index location for given identifier. Identifier
         does not need to be an exact match. Case insensitive, partial match
         suffices.
@@ -332,7 +345,7 @@ class PipelineLocator:
 
         return stages[0]
 
-    def get_index_location(self, value):
+    def get_index_location(self, value: TYPE_IDENTIFIER) -> int:
         """Return validated stage index location.
 
         Parameters
@@ -368,12 +381,12 @@ class PipelineLocator:
         else:
             raise ValueError(ERR_TYPE_ACCESS.format(type(value)))
 
-    def get_stage(self, value):
+    def get_stage(self, value: TYPE_IDENTIFIER) -> Transformer:
         """Return pipeline stage for given index or stage identifier.
 
         Parameters
         ----------
-        value: int, str
+        value: int, str, Transformer
             Identifies stage via index location or identifier substring.
 
         Returns
@@ -385,7 +398,7 @@ class PipelineLocator:
         idx = self.get_index_location(value)
         return self.pipeline.stages[idx]
 
-    def get_transformation(self, value):
+    def get_transformation(self, value: TYPE_IDENTIFIER) -> DataFrame:
         """Return pipeline stage's transformation for given index or
         stage identifier.
 
@@ -425,7 +438,7 @@ class PipelineCacher:
 
     """
 
-    def __init__(self, pipeline):
+    def __init__(self, pipeline: 'Pipeline'):
         """Pipeline cacher keeps track of stages for which caching is enabled
         via `self._store`.
 
@@ -439,7 +452,7 @@ class PipelineCacher:
         self.pipeline = pipeline
         self._store = set()
 
-    def enable(self, stages):
+    def enable(self, stages: List[TYPE_IDENTIFIER]) -> None:
         """Enable pipeline caching for given stages. Stage can be identified
         via index, identifier or stage itself.
 
@@ -464,7 +477,7 @@ class PipelineCacher:
             if self.pipeline._transformer:
                 self.pipeline(idx).cache()
 
-    def disable(self, stages):
+    def disable(self, stages: List[TYPE_IDENTIFIER]) -> None:
         """Disable pipeline caching for given stages. Stage can be identified
         via index, identifier or stage itself.
 
@@ -494,7 +507,7 @@ class PipelineCacher:
             if self.pipeline._transformer:
                 self.pipeline(idx).unpersist(blocking=True)
 
-    def clear(self):
+    def clear(self) -> None:
         """Remove all stage caches on pipeline level.
 
         If pipeline was already transformed, unpersists all already cached
@@ -509,7 +522,7 @@ class PipelineCacher:
         self._store.clear()
 
     @property
-    def enabled(self):
+    def enabled(self) -> List[Transformer]:
         """Return all stages with caching enabled on pipeline level
         in correct order.
 
@@ -526,7 +539,7 @@ class PipelineTransformer:
 
     """
 
-    def __init__(self, pipeline):
+    def __init__(self, pipeline: 'Pipeline'):
         """Pipeline transformer keeps track of all stages dataframe
         transformations via `self.transformation`. In addition, the input
         dataframe is referenced via `self.input_df`.
@@ -542,7 +555,7 @@ class PipelineTransformer:
         self.transformations = []
         self.input_df = None
 
-    def transform(self, df):
+    def transform(self, df: DataFrame) -> DataFrame:
         """Performs dataframe transformation for given input dataframe while
         respecting pipeline caches.
 
@@ -575,7 +588,7 @@ class PipelineTransformer:
 
         return df
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         """Allow transformer to be iterable. Simply returns an iterator of
         `transformations`.
 
@@ -583,7 +596,7 @@ class PipelineTransformer:
 
         return iter(self.transformations)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         """Return if transformation was already run.
 
         """
@@ -600,7 +613,7 @@ class PipelineProfiler:
 
     regex_stage = re.compile(r"\*\((\d+)\) ")
 
-    def __init__(self, pipeline):
+    def __init__(self, pipeline: 'Pipeline'):
         """Keeps track of all profiles stages via `self.profiles`.
 
         Parameters
@@ -613,7 +626,7 @@ class PipelineProfiler:
         self.pipeline = pipeline
         self.profiles = []
 
-    def profile(self, df=None):
+    def profile(self, df: Optional[DataFrame] = None) -> 'PipelineProfiler':
         """Profiles each pipeline stage and provides information about
         execution time, execution plan stage and stage dataframe shape.
 
@@ -649,7 +662,9 @@ class PipelineProfiler:
 
         return self
 
-    def get_stage_profile(self, df_stage, idx=None):
+    def get_stage_profile(self,
+                          df_stage: DataFrame,
+                          idx: Optional[int] = None) -> StageProfile:
         """Profile pipeline stage's dataframe and collect index, identifier,
         total time, number of rows and columns, execution plan stage and
         dataframe caching.
@@ -687,7 +702,7 @@ class PipelineProfiler:
 
         return str(pd.DataFrame([prof._asdict() for prof in self.profiles]))
 
-    def get_execution_stage_count(self, df) -> int:
+    def get_execution_stage_count(self, df: DataFrame) -> int:
         """Extract execution plan stage from `explain` string. All maximum
         execution plan stages are summed up to account for resets due to
         caching.
@@ -726,7 +741,7 @@ class PipelineProfiler:
         # sum up all local maxima
         return int(result)
 
-    def get_count_shape_time(self, df):
+    def get_count_shape_time(self, df: DataFrame) -> Tuple[float, int, int]:
         """Profiles dataframe while calling `count` action and return execution
         time, execution plan stage and number of rows and columns.
 
@@ -786,7 +801,7 @@ class Pipeline(PipelineModel):
 
     """
 
-    def __init__(self, stages, doc=None):
+    def __init__(self, stages: List, doc: Optional[str] = None):
         """Instantiate pipeline. Validate/convert stage input.
 
         """
@@ -804,7 +819,7 @@ class Pipeline(PipelineModel):
         self._loc = PipelineLocator(self)
         self._transformer = PipelineTransformer(self)
 
-    def profile(self, df=None):
+    def profile(self, df: Optional[DataFrame] = None) -> PipelineProfiler:
         """Executes each stage in order and collects information about
         execution time, execution plan stage, shape of the resulting dataframe
         and caching.
@@ -823,7 +838,7 @@ class Pipeline(PipelineModel):
 
         return PipelineProfiler(self).profile(df)
 
-    def _transform(self, df):
+    def _transform(self, df: DataFrame) -> DataFrame:
         """Apply stage's `transform` methods in order while storing
         intermediate stage results and respecting optional cache settings.
 
@@ -842,7 +857,7 @@ class Pipeline(PipelineModel):
 
         return self._transformer.transform(df)
 
-    def __getitem__(self, value):
+    def __getitem__(self, value: TYPE_IDENTIFIER) -> Transformer:
         """Get stage by index location or label access.
 
         Index location requires integer value. Label access requires string
@@ -861,7 +876,7 @@ class Pipeline(PipelineModel):
 
         return self._loc.get_stage(value)
 
-    def __call__(self, value):
+    def __call__(self, value: TYPE_IDENTIFIER) -> DataFrame:
         """Get stage's dataframe by index location or label access.
 
         Index location requires integer value. Label access requires string
