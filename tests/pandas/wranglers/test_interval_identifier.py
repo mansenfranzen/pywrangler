@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from tests.test_data.interval_identifier import (
@@ -45,7 +46,10 @@ MARKER_TYPES = {"string": {"start": "start",
 
                 "float": {"start": 1.1,
                           "end": 1.2,
-                          "noise": 1.3}}
+                          "noise": 1.3},
+                "nan": {"start": 1,
+                        "end": 2,
+                        "noise": np.NaN}}
 
 MARKERS = MARKER_TYPES.values()
 MARKERS_IDS = list(MARKER_TYPES.keys())
@@ -159,7 +163,7 @@ def test_groupby_order_columns(test_case, wrangler, marker, shuffle):
                                  **kwargs)
 
     test_output = wrangler_instance.fit_transform(test_input)
-    assert_frame_equal(test_output, expected)
+    assert_frame_equal(test_output, expected, check_dtype=False)
 
 
 @pytest.mark.parametrize(**GROUPBY_ORDER_KWARGS)
@@ -197,4 +201,4 @@ def test_no_groupby_order_columns(test_case, wrangler, groupby_order):
                                  **groupby_order)
 
     test_output = wrangler_instance.fit_transform(test_input)
-    assert_frame_equal(test_output, expected)
+    assert_frame_equal(test_output, expected, check_dtype=False)
