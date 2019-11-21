@@ -2,11 +2,13 @@
 and corresponding descriptions.
 
 """
-
+from typing import Any
 
 from pywrangler.base import BaseWrangler
 from pywrangler.util import sanitizer
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
+
+NULL = object()
 
 
 class IntervalIdentifier(BaseWrangler):
@@ -39,8 +41,8 @@ class IntervalIdentifier(BaseWrangler):
         Name of column which contains the opening and closing markers.
     marker_start: Any
         A value defining the start of an interval.
-    marker_end: Any
-        A value defining the end of an interval.
+    marker_end: Any, optional
+        A value defining the end of an interval, if necessary
     order_columns: str, Iterable[str], optional
         Column names which define the order of the data (e.g. a timestamp
         column). Sort order can be defined with the parameter `ascending`.
@@ -60,7 +62,7 @@ class IntervalIdentifier(BaseWrangler):
     def __init__(self,
                  marker_column: str,
                  marker_start,
-                 marker_end,
+                 marker_end: Any = NULL,
                  order_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
                  ascending: TYPE_ASCENDING = None,
@@ -73,6 +75,8 @@ class IntervalIdentifier(BaseWrangler):
         self.groupby_columns = sanitizer.ensure_iterable(groupby_columns)
         self.ascending = sanitizer.ensure_iterable(ascending)
         self.target_column_name = target_column_name
+
+        self._naive_algorithm = marker_end == NULL
 
         # sanity checks for sort order
         if self.ascending:

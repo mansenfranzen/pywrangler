@@ -33,7 +33,8 @@ from tests.test_data.interval_identifier import (
     single_interval,
     single_interval_spanning,
     start_marker_left_open,
-    starts_with_single_interval
+    starts_with_single_interval,
+    identical_start_end_with_invalids
 )
 
 MARKER_TYPES = {"string": {"start": "start.start!2",
@@ -242,7 +243,6 @@ def test_no_groupby_order_columns(test_case, wrangler, groupby_order,
 def test_groupby_multiple_intervals_null(wrangler, marker, shuffle,
                                          repartition, spark):
     """Tests correct behaviour for data including null values.
-
     Parameters
     ----------
     wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
@@ -255,7 +255,6 @@ def test_groupby_multiple_intervals_null(wrangler, marker, shuffle,
     repartition: None, int
         Define repartition for input dataframe.
     spark: SparkSession
-
     """
 
     # generate test_input and expected result
@@ -287,4 +286,25 @@ def test_groupby_multiple_intervals_null(wrangler, marker, shuffle,
 
     test_output = wrangler_instance.fit_transform(test_input)
 
+    assert_pyspark_pandas_equality(test_output, expected)
+
+@pytest.mark.parametrize(**MARKERS_KWARGS)
+def test_identical_start_end_marker(marker, spark):
+
+    test_input, expected = identical_start_end_with_invalids(start=marker["start"],
+                                                             noise=marker["noise"],
+                                                             target_column_name="iids")
+
+    expected = pd.merge(test_input, expected, left_index=True,
+                        right_index=True)
+
+    test_input = spark.createDataFrame(test_input)
+    kwargs = {"order_columns": "order",
+              "groupby_columns": "groupby"}
+
+    wrangler_instance = VectorizedCumSum(marker_column="marker",
+                                         marker_start=marker["start"],
+                                         **kwargs)
+
+    test_output = wrangler_instance.fit_transform(test_input)
     assert_pyspark_pandas_equality(test_output, expected)

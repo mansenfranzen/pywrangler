@@ -1,6 +1,7 @@
 """pytest configuration
 
 """
+import multiprocessing
 
 import multiprocessing
 
