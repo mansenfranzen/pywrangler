@@ -3,7 +3,6 @@
 isort:skip_file
 """
 
-
 import pytest
 
 import pandas as pd
@@ -12,7 +11,8 @@ pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
 from pywrangler.pyspark.wranglers.interval_identifier import VectorizedCumSum
-from pywrangler.pyspark.testing import assert_pyspark_pandas_equality
+from pywrangler.pyspark.testing import assert_pyspark_pandas_equality, \
+    PANDAS_NULL, prepare_spark_conversion
 
 from tests.test_data.interval_identifier import (
     end_marker_begins,
@@ -233,3 +233,58 @@ def test_no_groupby_order_columns(test_case, wrangler, groupby_order,
     else:
         test_output = wrangler_instance.fit_transform(test_input)
         assert_pyspark_pandas_equality(test_output, expected)
+
+
+@pytest.mark.parametrize(**REPARTITION_KWARGS)
+@pytest.mark.parametrize(**SHUFFLE_KWARGS)
+@pytest.mark.parametrize(**MARKERS_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_groupby_multiple_intervals_null(wrangler, marker, shuffle,
+                                         repartition, spark):
+    """Tests correct behaviour for data including null values.
+
+    Parameters
+    ----------
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+    marker: dict
+        Defines the type of data which is used to generate test data. See
+        `MARKERS`.
+    shuffle: bool
+        Define if the data gets shuffled or not.
+    repartition: None, int
+        Define repartition for input dataframe.
+    spark: SparkSession
+
+    """
+
+    # generate test_input and expected result
+    test_case = groupby_multiple_intervals
+    test_input, expected = test_case(start=marker["start"],
+                                     end=marker["end"],
+                                     noise=PANDAS_NULL,
+                                     target_column_name="iids",
+                                     shuffle=shuffle)
+
+    test_input = prepare_spark_conversion(test_input)
+    expected = pd.merge(test_input, expected, left_index=True,
+                        right_index=True)
+
+    test_input = spark.createDataFrame(test_input)
+
+    if repartition:
+        test_input = test_input.repartition(repartition)
+
+    kwargs = {"order_columns": "order",
+              "groupby_columns": "groupby",
+              "ascending": [True]}
+
+    # instantiate actual wrangler_instance
+    wrangler_instance = wrangler(marker_column="marker",
+                                 marker_start=marker["start"],
+                                 marker_end=marker["end"],
+                                 **kwargs)
+
+    test_output = wrangler_instance.fit_transform(test_input)
+
+    assert_pyspark_pandas_equality(test_output, expected)
