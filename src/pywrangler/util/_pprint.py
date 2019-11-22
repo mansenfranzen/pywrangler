@@ -46,7 +46,7 @@ def _indent(lines: ITERABLE, indent: int = 3) -> list:
 
 
 def header(name: str, indent: int = 0, underline: str = "-") -> str:
-    """Create header with underline.
+    """Create columns with underline.
 
     Parameters
     ----------
@@ -59,7 +59,7 @@ def header(name: str, indent: int = 0, underline: str = "-") -> str:
 
     Returns
     -------
-    header: str
+    columns: str
 
     """
 
@@ -84,8 +84,8 @@ def enumeration(values: ENUM, indent: int = 0, bullet_char: str = "-",
     bullet_char: str, optional
         Bullet character.
     align_values: bool, optional
-        If dict is provided, align all values to the same column. The longest
-        key defines the exact position.
+        If dict is provided, align all identifiers to the same column. The
+        longest key defines the exact position.
     align_width: int, optional
         If dict is provided and `align_values` is True, manually set the align
         width.
@@ -222,7 +222,7 @@ def textwrap_docstring(dobject: Any, width: int = 70) -> List[str]:
     dobject: Any
         Object to extract doc string from.
     width: int, optional
-        Length of text body to wrap doc string.
+        Length of text values to wrap doc string.
 
     Returns
     -------
@@ -233,7 +233,7 @@ def textwrap_docstring(dobject: Any, width: int = 70) -> List[str]:
     if not dobject.__doc__:
         return []
 
-    sanitized = REGEX_REMOVE_WHITESPACES.sub(" ", dobject.__doc__)
+    sanitized = REGEX_REMOVE_WHITESPACES.sub(" ", dobject.__doc__).strip()
     return textwrap.wrap(sanitized, width=width)
 
 

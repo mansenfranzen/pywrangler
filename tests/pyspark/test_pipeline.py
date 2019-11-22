@@ -356,7 +356,7 @@ def test_pipeline_describer(spark):
     assert df_descriptions.loc[0, "idx"] == "None"
     assert df_descriptions.loc[1, "uid"] == pipe[0].uid
     assert df_descriptions.loc[1, "name"] == "add_order"
-    assert df_descriptions.loc[4, "stage_count"] == 3
+    assert df_descriptions.loc[1, "stage_count"] == 1
     assert df_descriptions.loc[4, "cols"] == 2
     assert df_descriptions.loc[4, "cached"] == False # noqa E712
 

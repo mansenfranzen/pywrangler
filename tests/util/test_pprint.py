@@ -104,3 +104,29 @@ def test_pretty_time_duration():
     assert ptd(0.5, precision=1) == "500.0 ms"
     assert ptd(0.0005, precision=1) == "500.0 µs"
     assert ptd(0.0000005, precision=1) == "500.0 ns"
+    assert ptd(0) == "0 s"
+    assert ptd(-1.1) == "-1.1 s"
+
+
+def test_textwrap_docstring():
+    twds = _pprint.textwrap_docstring
+
+    class NoDocStr:
+        pass
+
+    assert twds(NoDocStr) == []
+
+    class Mock:
+        """         Dummy test doc string.      """
+        pass
+
+    assert twds(Mock) == ["Dummy test doc string."]
+    assert twds(Mock, 10) == ["Dummy test", "doc", "string."]
+
+
+def test_truncate():
+    truncate = _pprint.truncate
+
+    assert truncate("foo", 20) == "foo"
+    assert truncate("foofoofoo", 6) == "foo..."
+    assert truncate("foofoofoo", 4, "-") == "foo-"
