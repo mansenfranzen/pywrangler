@@ -874,7 +874,20 @@ class Pipeline(PipelineModel):
 
         """
 
-        return self._loc.get_stage(value)
+        if isinstance(value, slice):
+            start = value.start or 0
+            stop = value.stop or len(self.stages)
+
+            idx_start = self._loc.get_index_location(start)
+            idx_end = self._loc.get_index_location(stop)
+
+            stages = self.stages[idx_start:idx_end + 1]
+            stages = [copy.deepcopy(stage) for stage in stages]
+
+            return Pipeline(stages, self.doc)
+
+        else:
+            return self._loc.get_stage(value)
 
     def __call__(self, value: TYPE_IDENTIFIER) -> DataFrame:
         """Get stage's dataframe by index location or label access.
