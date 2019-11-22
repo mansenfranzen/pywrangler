@@ -20,8 +20,8 @@ from tests.test_data.interval_identifier import (
     single_interval,
     single_interval_spanning,
     start_marker_left_open,
-    starts_with_single_interval
-)
+    starts_with_single_interval,
+    identical_start_end_with_invalids)
 
 from pywrangler.pandas.wranglers.interval_identifier import (
     NaiveIterator,
@@ -201,4 +201,21 @@ def test_no_groupby_order_columns(test_case, wrangler, groupby_order):
                                  **groupby_order)
 
     test_output = wrangler_instance.fit_transform(test_input)
+
+    assert_frame_equal(test_output, expected)
+
+
+@pytest.mark.parametrize(**MARKERS_KWARGS)
+def test_identical_start_end_marker(marker):
+    test_input, expected = identical_start_end_with_invalids(start=marker["start"],
+                                                             noise=marker["noise"],
+                                                             target_column_name="iids")
+
+    wrangler_instance = VectorizedCumSum(marker_column="marker",
+                                         marker_start=marker["start"],
+                                         order_columns="order",
+                                         groupby_columns="groupby")
+
+    test_output = wrangler_instance.fit_transform(test_input)
+
     assert_frame_equal(test_output, expected, check_dtype=False)
