@@ -24,7 +24,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
 
     """
 
-    def validate_input(self,  df: pd.DataFrame):
+    def validate_input(self, df: pd.DataFrame):
         """Checks input data frame in regard to column names and empty data.
 
         Parameters
@@ -60,10 +60,10 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         df_ordered = util.sort_values(df, self.order_columns, self.ascending)
         df_grouped = util.groupby(df_ordered, self.groupby_columns)
 
-        df_result = df_grouped[self.marker_column]\
-            .transform(self._transform)\
-            .astype(int)\
-            .reindex(df.index)\
+        df_result = df_grouped[self.marker_column] \
+            .transform(self._transform) \
+            .astype(int) \
+            .reindex(df.index) \
             .to_frame(self.target_column_name)
 
         # check output
@@ -187,22 +187,30 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
 
         """
 
-        # get boolean series with start and end markers
-        bool_start = series.eq(self.marker_start)
-        bool_end = series.eq(self.marker_end)
+        if self._naive_algorithm:
+            # when series equals marker_column return True
+            bool_start = series.eq(self.marker_start)
 
-        # shifting the close marker allows cumulative sum to include the end
-        bool_end_shift = bool_end.shift().fillna(False)
+            # cast bool column to int and calc cumsum
+            return bool_start.cumsum()
 
-        # get increasing ids for intervals (in/valid) with cumsum
-        ser_ids = bool_start.add(bool_end_shift).cumsum()
+        else:
+            # get boolean series with start and end markers
+            bool_start = series.eq(self.marker_start)
+            bool_end = series.eq(self.marker_end)
 
-        # separate valid vs invalid: ids with start AND end marker are valid
-        bool_valid_ids = bool_start.add(bool_end).groupby(ser_ids).sum().eq(2)
+            # shifting the close marker allows cumulative sum to include the end
+            bool_end_shift = bool_end.shift().fillna(False)
 
-        valid_ids = bool_valid_ids.index[bool_valid_ids].values
-        bool_valid = ser_ids.isin(valid_ids)
+            # get increasing ids for intervals (in/valid) with cumsum
+            ser_ids = bool_start.add(bool_end_shift).cumsum()
 
-        # re-numerate ids from 1 to x and fill invalid with 0
-        result = ser_ids[bool_valid].diff().ne(0).cumsum()
-        return result.reindex(series.index).fillna(0).values
+            # separate valid vs invalid: ids with start AND end marker are valid
+            bool_valid_ids = bool_start.add(bool_end).groupby(ser_ids).sum().eq(2)
+
+            valid_ids = bool_valid_ids.index[bool_valid_ids].values
+            bool_valid = ser_ids.isin(valid_ids)
+
+            # re-numerate ids from 1 to x and fill invalid with 0
+            result = ser_ids[bool_valid].diff().ne(0).cumsum()
+            return result.reindex(series.index).fillna(0).values
