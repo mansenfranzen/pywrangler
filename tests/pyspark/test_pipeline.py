@@ -203,7 +203,7 @@ def test_pipeline_locator(spark, pipe):
     with pytest.raises(ValueError):
         pipe("add")
 
-    # test non existant identifer
+    # test non existant identifier
     with pytest.raises(ValueError):
         pipe("I do not exist")
 
@@ -265,7 +265,7 @@ def test_pipeline_transformer(spark, pipe):
     assert [x for x in pipe._transformer] == pipe._transformer.transformations
 
 
-def test_pipeline_profiler(spark, pipe):
+def test_pipeline_profiler(spark):
     """Test pipeline profiler.
 
     """
@@ -291,40 +291,74 @@ def test_pipeline_profiler(spark, pipe):
         pipe.profile()
 
     # test non pipeline df before transform
-    profile = pipe.profile(df_input)
-    profiles = profile.profiles
+    df_profiles = pipe.profile(df_input)
 
-    assert profiles[0].identifier == "Input dataframe"
-    assert profiles[0].rows == 10
-    assert profiles[1].idx == 0
-    assert profiles[1].identifier == pipe[0].uid
-    assert profiles[4].stage == 3
-    assert profiles[4].cols == 2
-    assert profiles[4].cached is False
+    assert df_profiles.loc[0, "name"] == "Input dataframe"
+    assert df_profiles.loc[0, "rows"] == 10
+    assert df_profiles.loc[0, "idx"] == "None"
+    assert df_profiles.loc[1, "name"] == "add_order"
+    assert df_profiles.loc[4, "stage_count"] == 3
+    assert df_profiles.loc[4, "cols"] == 2
+    assert df_profiles.loc[4, "cached"] == False # noqa E712
 
     # test pipeline profile after transform
     pipe.transform(df_input)
 
-    profile = pipe.profile()
-    profiles = profile.profiles
+    df_profiles = pipe.profile()
 
-    assert profiles[0].identifier == "Input dataframe"
-    assert profiles[0].rows == 10
-    assert profiles[1].idx == 0
-    assert profiles[1].identifier == pipe[0].uid
-    assert profiles[4].stage == 3
-    assert profiles[4].cols == 2
-    assert profiles[4].cached is False
+    assert df_profiles.loc[0, "name"] == "Input dataframe"
+    assert df_profiles.loc[0, "rows"] == 10
+    assert df_profiles.loc[0, "idx"] == "None"
+    assert df_profiles.loc[1, "name"] == "add_order"
+    assert df_profiles.loc[4, "stage_count"] == 3
+    assert df_profiles.loc[4, "cols"] == 2
+    assert df_profiles.loc[4, "cached"] == False # noqa E712
 
     # add caching and test
     pipe.cache.enable(2)
     pipe.transform(df_input)
 
-    profile = pipe.profile()
-    profiles = profile.profiles
+    df_profiles = pipe.profile()
 
-    assert profiles[3].cached is True
-    assert profiles[4].stage == 4
+    assert df_profiles.loc[3, "cached"] == True # noqa E712
+    assert df_profiles.loc[4, "stage_count"] == 4
+
+
+def test_pipeline_describer(spark):
+    """Test pipeline describer.
+
+    """
+
+    df_input = spark.range(10).toDF("value")
+
+    def add_order(df):
+        return df.withColumn("order", F.col("value") + 5)
+
+    def add_groupby(df):
+        return df.withColumn("groupby", F.col("value") + 10)
+
+    def sort(df):
+        return df.orderBy("order")
+
+    def groupby(df):
+        return df.groupBy("groupby").agg(F.max("value"))
+
+    pipe = pipeline.Pipeline(stages=[add_order, add_groupby, sort, groupby])
+
+    # test missing df
+    with pytest.raises(ValueError):
+        pipe.profile()
+
+    # test non pipeline df before transform
+    df_descriptions = pipe.describe(df_input)
+
+    assert df_descriptions.loc[0, "name"] == "Input dataframe"
+    assert df_descriptions.loc[0, "idx"] == "None"
+    assert df_descriptions.loc[1, "uid"] == pipe[0].uid
+    assert df_descriptions.loc[1, "name"] == "add_order"
+    assert df_descriptions.loc[4, "stage_count"] == 3
+    assert df_descriptions.loc[4, "cols"] == 2
+    assert df_descriptions.loc[4, "cached"] == False # noqa E712
 
 
 def test_full_pipeline(spark):
