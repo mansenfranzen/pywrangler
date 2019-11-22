@@ -28,16 +28,31 @@ from pywrangler.pyspark.base import PySparkWrangler
 from pywrangler.util.sanitizer import ensure_iterable
 
 TYPE_STAGE = Union[PySparkWrangler, Transformer, Callable]
-TYPE_IDENTIFIER = Union[int, str, Transformer]
+TYPE_IDENTIFIER = Union[int, str, Transformer, slice]
 TYPE_PARAM_DICT = Dict[str, Union[Callable, Param]]
 
-StageProfile = NamedTuple("StageProfile", [("idx", int),
-                                           ("identifier", str),
+StageProperties = NamedTuple("StageProperties", [("name", str),
+                                                 ("cols", int),
+                                                 ("stage_count", int),
+                                                 ("cached", bool),
+                                                 ("uid", str)])
+
+StageProfile = NamedTuple("StageProfile", [("idx", str),
+                                           ("name", str),
                                            ("total_time", float),
                                            ("rows", int),
                                            ("cols", int),
-                                           ("stage", int),
-                                           ("cached", bool)])
+                                           ("stage_count", int),
+                                           ("cached", bool),
+                                           ("uid", str)])
+
+StageDescription = NamedTuple("StageDescription", [("idx", str),
+                                                   ("name", str),
+                                                   ("doc", str),
+                                                   ("cols", int),
+                                                   ("stage_count", int),
+                                                   ("cached", bool),
+                                                   ("uid", str)])
 
 ERR_TYPE_ACCESS = "Value has incorrect type '{}' (integer or string allowed)."
 
@@ -624,9 +639,8 @@ class PipelineProfiler:
         """
 
         self.pipeline = pipeline
-        self.profiles = []
 
-    def profile(self, df: Optional[DataFrame] = None) -> 'PipelineProfiler':
+    def profile(self, df: Optional[DataFrame] = None) -> pd.DataFrame:
         """Profiles each pipeline stage and provides information about
         execution time, execution plan stage and stage dataframe shape.
 
@@ -636,7 +650,54 @@ class PipelineProfiler:
             If provided, profiles pipeline on given dataframe. If not given,
             uses already existing pipeline transformer object.
 
+        Returns
+        -------
+        profile: pd.DataFrame
+
         """
+
+        return self._execute("profile", df)
+
+    def describe(self, df: Optional[DataFrame] = None) -> pd.DataFrame:
+        """Describes each pipeline stage and provides information about
+        execution plan stage, number of columns and docs.
+
+        Parameters
+        ----------
+        df: pyspark.sql.DataFrame, optional
+            If provided, profiles pipeline on given dataframe. If not given,
+            uses already existing pipeline transformer object.
+
+        Returns
+        -------
+        description: pd.DataFrame
+
+        """
+
+        return self._execute("describe", df)
+
+    def _execute(self, method: str,
+                 df: Optional[DataFrame] = None) -> pd.DataFrame:
+        """Generic function to either describe or profile given pipeline.
+        Describing the pipeline does not run any actions. In contrast,
+        profiling will actually call actions and may take some time.
+
+        Parameters
+        ----------
+        method: str
+            Choose either `describe` or `profile`.
+        df: pyspark.sql.DataFrame, optional
+            If provided, profiles pipeline on given dataframe. If not given,
+            uses already existing pipeline transformer object.
+
+        """
+
+        methods = {
+            "describe": self._get_stage_description,
+            "profile": self._get_stage_profile
+        }
+
+        caller = methods[method]
 
         # ensure existing input dataframe
         if df is None and not self.pipeline._transformer:
@@ -650,21 +711,55 @@ class PipelineProfiler:
             transformer = self.pipeline._transformer
 
         # reset profiler
-        self.profiles.clear()
+        results = []
 
         # initial profile of input dataframe
-        start_profile = self.get_stage_profile(transformer.input_df)
-        self.profiles.append(start_profile)
+        start_profile = caller(transformer.input_df)
+        results.append(start_profile)
 
         # subsequent stage profiles
         for idx, df_stage in enumerate(transformer):
-            self.profiles.append(self.get_stage_profile(df_stage, idx))
+            results.append(caller(df_stage, idx))
 
-        return self
+        results = [result._asdict() for result in results]
+        return pd.DataFrame(results)
 
-    def get_stage_profile(self,
-                          df_stage: DataFrame,
-                          idx: Optional[int] = None) -> StageProfile:
+    def _get_stage_properties(self,
+                              df_stage: DataFrame,
+                              idx: Optional[int] = None) -> StageProperties:
+        """Provides general stage properties like identifier, stage execution
+        count, number of columns and caching.
+
+        Parameters
+        ----------
+        df_stage: pyspark.sql.DataFrame
+            Dataframe representation of stage.
+        idx: integer, None, optional
+            If idx is given, resembles a valid pipeline stage. If not,
+            represents input dataframe.
+
+        Returns
+        -------
+        stage_properties: StageProperties
+
+        """
+
+        if idx is None:
+            name = "Input dataframe"
+            uid = ""
+        else:
+            name = self.pipeline.stages[idx].__class__.__name__
+            uid = self.pipeline.stages[idx].uid
+
+        execution_stage_count = self._get_execution_stage_count(df_stage)
+        cols = len(df_stage.columns)
+        cached = df_stage.is_cached
+
+        return StageProperties(name, cols, execution_stage_count, cached, uid)
+
+    def _get_stage_profile(self,
+                           df_stage: DataFrame,
+                           idx: Optional[int] = None) -> StageProfile:
         """Profile pipeline stage's dataframe and collect index, identifier,
         total time, number of rows and columns, execution plan stage and
         dataframe caching.
@@ -683,26 +778,54 @@ class PipelineProfiler:
 
         """
 
-        if idx is None:
-            identifier = "Input dataframe"
-        else:
-            identifier = self.pipeline.stages[idx].uid
+        stage_properties = self._get_stage_properties(df_stage, idx)
+        rows, total_time = self._get_rows_and_execution_time(df_stage)
 
-        exec_stage = self.get_execution_stage_count(df_stage)
-        cached = df_stage.is_cached
-        total_time, rows, cols = self.get_count_shape_time(df_stage)
+        return StageProfile(str(idx),
+                            stage_properties.name,
+                            total_time,
+                            rows,
+                            stage_properties.cols,
+                            stage_properties.stage_count,
+                            stage_properties.cached,
+                            stage_properties.uid)
 
-        return StageProfile(idx, identifier, total_time,
-                            rows, cols, exec_stage, cached)
+    def _get_stage_description(self,
+                               df_stage: DataFrame,
+                               idx: Optional[int] = None) -> StageDescription:
+        """Describe pipeline stages and collect index, identifier,
+        number of columns, stage execution count, doc string and caching.
 
-    def __str__(self):
-        """Provides string representation of stage profile.
+        Parameters
+        ----------
+        df_stage: pyspark.sql.DataFrame
+            Dataframe representation of stage.
+        idx: integer, None, optional
+            If idx is given, resembles a valid pipeline stage. If not,
+            represents input dataframe.
+
+        Returns
+        -------
+        description: StageDescription
 
         """
 
-        return str(pd.DataFrame([prof._asdict() for prof in self.profiles]))
+        stage_properties = self._get_stage_properties(df_stage, idx)
 
-    def get_execution_stage_count(self, df: DataFrame) -> int:
+        if idx is not None:
+            doc_string = self.pipeline.stages[idx].__doc__
+        else:
+            doc_string = ""
+
+        return StageDescription(str(idx),
+                                stage_properties.name,
+                                doc_string,
+                                stage_properties.cols,
+                                stage_properties.stage_count,
+                                stage_properties.cached,
+                                stage_properties.uid)
+
+    def _get_execution_stage_count(self, df: DataFrame) -> int:
         """Extract execution plan stage from `explain` string. All maximum
         execution plan stages are summed up to account for resets due to
         caching.
@@ -741,9 +864,9 @@ class PipelineProfiler:
         # sum up all local maxima
         return int(result)
 
-    def get_count_shape_time(self, df: DataFrame) -> Tuple[float, int, int]:
+    def _get_rows_and_execution_time(self, df: DataFrame) -> Tuple[int, float]:
         """Profiles dataframe while calling `count` action and return execution
-        time, execution plan stage and number of rows and columns.
+        time, execution plan stage and number of rows.
 
         Parameters
         ----------
@@ -758,16 +881,13 @@ class PipelineProfiler:
 
         """
 
-        # number of columns
-        cols = len(df.columns)
-
         # total time and count
         ts_start = pd.Timestamp.now()
         rows = df.count()
         ts_end = pd.Timestamp.now()
         total_time = (ts_end - ts_start).total_seconds()
 
-        return total_time, rows, cols
+        return rows, total_time
 
 
 class Pipeline(PipelineModel):
@@ -796,9 +916,6 @@ class Pipeline(PipelineModel):
     doc: str, optional
         Provide optional doc string for the pipeline.
 
-    Examples
-    --------
-
     """
 
     def __init__(self, stages: List, doc: Optional[str] = None):
@@ -819,7 +936,7 @@ class Pipeline(PipelineModel):
         self._loc = PipelineLocator(self)
         self._transformer = PipelineTransformer(self)
 
-    def profile(self, df: Optional[DataFrame] = None) -> PipelineProfiler:
+    def profile(self, df: Optional[DataFrame] = None) -> pd.DataFrame:
         """Executes each stage in order and collects information about
         execution time, execution plan stage, shape of the resulting dataframe
         and caching.
@@ -832,11 +949,29 @@ class Pipeline(PipelineModel):
 
         Returns
         -------
-        profiler: PipelineProfiler
+        profile: pd.DataFrame
 
         """
 
         return PipelineProfiler(self).profile(df)
+
+    def describe(self, df: Optional[DataFrame] = None) -> pd.DataFrame:
+        """Describes each stage in order and collects information about
+        execution plan stage, number of columns and caching.
+
+        Parameters
+        ----------
+        df: pyspark.sql.DataFrame, optional
+            If provided, profiles pipeline on given dataframe. If not given,
+            uses already existing pipeline transformer object.
+
+        Returns
+        -------
+        description: pd.DataFrame
+
+        """
+
+        return PipelineProfiler(self).describe(df)
 
     def _transform(self, df: DataFrame) -> DataFrame:
         """Apply stage's `transform` methods in order while storing
@@ -857,16 +992,19 @@ class Pipeline(PipelineModel):
 
         return self._transformer.transform(df)
 
-    def __getitem__(self, value: TYPE_IDENTIFIER) -> Transformer:
-        """Get stage by index location or label access.
+    def __getitem__(self, value: TYPE_IDENTIFIER) -> \
+            Union[Transformer, 'Pipeline']:
+        """Get stage by index location/label access or create a sliced copy of
+        the pipeline.
 
         Index location requires integer value. Label access requires string
-        value.
+        value. Sliced copy of the pipeline requires a slice.
 
         Parameters
         ----------
-        value: str, int
-            Integer for index location or string for label access of stages.
+        value: str, int, slice
+            Integer for index location or string for label access of stages. If
+            slice is given, creates a sliced copy of the pipeline.
 
         Returns
         -------
@@ -906,4 +1044,12 @@ class Pipeline(PipelineModel):
             The dataframe representation of the stage.
 
         """
+
         return self._loc.get_transformation(value)
+
+    def __repr__(self):
+        tpl = "Pipeline (Stages: {}, Uid: {}, Doc: {})"
+        return tpl.format(len(self.stages), self.uid, self.doc)
+
+    def __str__(self):
+        return self.__repr__()
