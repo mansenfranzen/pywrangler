@@ -357,21 +357,42 @@ def multiple_groupby_order_columns_with_invalids(start, end, noise,
 
 
 def identical_start_end_with_invalids(start, noise, target_column_name):
-    # cols:     order, groupby, marker, iid
-    data = [[1, 1, noise, 0],
-            [2, 1, start, 1],
-            [3, 1, start, 2],
-            [4, 1, noise, 2],
+    # cols:  order, groupby, marker, iid
+    data = [[1,     1,       noise,  0],
+            [2,     1,       start,  1],
+            [3,     1,       start,  2],
+            [4,     1,       noise,  2],
 
-            [5, 2, start, 1],
-            [6, 2, noise, 1],
-            [7, 2, start, 2],
-            [8, 2, noise, 2],
-            [9, 2, noise, 2],
-            [10, 2, start, 3],
-            [11, 2, noise, 3],
-            [12, 2, start, 4],
-            [13, 2, noise, 4],
-            [14, 2, start, 5]]
+            [5,     2,       start,  1],
+            [6,     2,       noise,  1],
+            [7,     2,       start,  2],
+            [8,     2,       noise,  2],
+            [9,     2,       noise,  2],
+            [10,    2,       start,  3],
+            [11,    2,       noise,  3],
+            [12,    2,       start,  4],
+            [13,    2,       noise,  4],
+            [14,    2,       start,  5]]
+
+    return _return_dfs(data, target_column_name)
+
+
+def identical_start_end_with_invalids_unsorted(start, noise,
+                                               target_column_name):
+    # cols:  order, groupby, marker, iid
+    data = [[1,     1,       noise,  0],
+            [13,    2,       noise,  4],
+            [3,     1,       start,  2],
+            [8,     2,       noise,  2],
+            [7,     2,       start,  2],
+            [4,     1,       noise,  2],
+            [5,     2,       start,  1],
+            [6,     2,       noise,  1],
+            [9,     2,       noise,  2],
+            [10,    2,       start,  3],
+            [2,     1,       start,  1],
+            [11,    2,       noise,  3],
+            [12,    2,       start,  4],
+            [14,    2,       start,  5]]
 
     return _return_dfs(data, target_column_name)
