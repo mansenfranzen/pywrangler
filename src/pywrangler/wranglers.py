@@ -8,7 +8,7 @@ from pywrangler.base import BaseWrangler
 from pywrangler.util import sanitizer
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
 
-NULL = object()
+NONEVALUE = object()
 
 
 class IntervalIdentifier(BaseWrangler):
@@ -17,7 +17,8 @@ class IntervalIdentifier(BaseWrangler):
 
     An interval is defined as a range of values beginning with an opening
     marker and ending with a closing marker (e.g. the interval daylight may be
-    defined as all events/values occurring between sunrise and sunset).
+    defined as all events/values occurring between sunrise and sunset). Start
+    and end marker may be identical.
 
     The interval identification wrangler assigns ids to values such that values
     belonging to the same interval share the same interval id. For example, all
@@ -25,7 +26,8 @@ class IntervalIdentifier(BaseWrangler):
     the second daylight interval will be assigned with id 2 and so on.
 
     Values which do not belong to any valid interval are assigned the value 0
-    by definition.
+    by definition (if start and end marker are identical, there are only
+    invalid values possible before the first start marker is encountered).
 
     Only the shortest valid interval is identified. Given multiple opening
     markers in sequence without an intermittent closing marker, only the last
@@ -62,7 +64,7 @@ class IntervalIdentifier(BaseWrangler):
     def __init__(self,
                  marker_column: str,
                  marker_start,
-                 marker_end: Any = NULL,
+                 marker_end: Any = NONEVALUE,
                  order_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
                  ascending: TYPE_ASCENDING = None,
@@ -76,7 +78,8 @@ class IntervalIdentifier(BaseWrangler):
         self.ascending = sanitizer.ensure_iterable(ascending)
         self.target_column_name = target_column_name
 
-        self._naive_algorithm = marker_end == NULL
+        # check for identical start and end values
+        self._naive_algorithm = marker_end == NONEVALUE
 
         # sanity checks for sort order
         if self.ascending:
