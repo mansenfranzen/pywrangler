@@ -71,47 +71,37 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         w_lag = Window.partitionBy(groupby).orderBy(orderby)
         w_id = Window.partitionBy(groupby + [self.target_column_name])
 
+        # get boolean series with start and end markers
+        marker_col = F.col(self.marker_column)
+        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
+
+        # account for identical start and end markers
         if self._naive_algorithm:
-            # identical marker for start and end
-            # get boolean series with start and end markers
-            marker_col = F.col(self.marker_column)
-            bool_start = marker_col.eqNullSafe(self.marker_start).cast(
-                "integer")
-
-            # get increasing ids for intervals (in/valid) with cumsum
             ser_id = F.sum(bool_start).over(w_lag)
-
-            # ser_id needs be created temporarily for renumerate_adjusted
             return df.withColumn(self.target_column_name, ser_id)
 
-        else:
-            # difference marker for start and end
-            # get boolean series with start and end markers
-            marker_col = F.col(self.marker_column)
-            bool_start = marker_col.eqNullSafe(self.marker_start).cast(
-                "integer")
-            bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
-            bool_start_end = bool_start + bool_end
+        bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
+        bool_start_end = bool_start + bool_end
 
-            # shifting the close marker allows cumulative sum to include the end
-            bool_end_shift = F.lag(bool_end, default=1).over(w_lag).cast("integer")
-            bool_start_end_shift = bool_start + bool_end_shift
+        # shifting the close marker allows cumulative sum to include the end
+        bool_end_shift = F.lag(bool_end, default=1).over(w_lag).cast("integer")
+        bool_start_end_shift = bool_start + bool_end_shift
 
-            # get increasing ids for intervals (in/valid) with cumsum
-            ser_id = F.sum(bool_start_end_shift).over(w_lag)
+        # get increasing ids for intervals (in/valid) with cumsum
+        ser_id = F.sum(bool_start_end_shift).over(w_lag)
 
-            # separate valid vs invalid: ids with start AND end marker are valid
-            bool_valid = F.sum(bool_start_end).over(w_id) == 2
-            valid_ids = F.when(bool_valid, ser_id).otherwise(0)
+        # separate valid vs invalid: ids with start AND end marker are valid
+        bool_valid = F.sum(bool_start_end).over(w_id) == 2
+        valid_ids = F.when(bool_valid, ser_id).otherwise(0)
 
-            # re-numerate ids from 1 to x and fill invalid with 0
-            valid_ids_shift = F.lag(valid_ids, default=0).over(w_lag)
-            valid_ids_diff = valid_ids_shift - valid_ids
-            valid_ids_increase = (valid_ids_diff < 0).cast("integer")
+        # re-numerate ids from 1 to x and fill invalid with 0
+        valid_ids_shift = F.lag(valid_ids, default=0).over(w_lag)
+        valid_ids_diff = valid_ids_shift - valid_ids
+        valid_ids_increase = (valid_ids_diff < 0).cast("integer")
 
-            renumerate = F.sum(valid_ids_increase).over(w_lag)
-            renumerate_adjusted = F.when(bool_valid, renumerate).otherwise(0)
+        renumerate = F.sum(valid_ids_increase).over(w_lag)
+        renumerate_adjusted = F.when(bool_valid, renumerate).otherwise(0)
 
-            # ser_id needs be created temporarily for renumerate_adjusted
-            return df.withColumn(self.target_column_name, ser_id) \
-                .withColumn(self.target_column_name, renumerate_adjusted)
+        # ser_id needs be created temporarily for renumerate_adjusted
+        return df.withColumn(self.target_column_name, ser_id) \
+            .withColumn(self.target_column_name, renumerate_adjusted)
