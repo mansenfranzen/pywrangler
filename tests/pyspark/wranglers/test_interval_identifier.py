@@ -34,8 +34,8 @@ from tests.test_data.interval_identifier import (
     single_interval_spanning,
     start_marker_left_open,
     starts_with_single_interval,
-    identical_start_end_with_invalids
-)
+    identical_start_end_with_invalids,
+    identical_start_end_with_invalids_unsorted)
 
 MARKER_TYPES = {"string": {"start": "start.start!2",
                            "end": "end.end#4",
@@ -95,6 +95,13 @@ TEST_CASES_NO_ORDER_GROUP_IDS = [x.__name__ for x in TEST_CASES_NO_ORDER_GROUP]
 TEST_CASES_NO_ORDER_GROUP_KWARGS = dict(argnames='test_case',
                                         argvalues=TEST_CASES_NO_ORDER_GROUP,
                                         ids=TEST_CASES_NO_ORDER_GROUP_IDS)
+
+TEST_CASES_IDENTICAL = (identical_start_end_with_invalids,
+                        identical_start_end_with_invalids_unsorted)
+TEST_CASE_IDENTICAL_IDS = [x.__name__ for x in TEST_CASES_IDENTICAL]
+TEST_CASE_IDENTICAL_KWARGS = dict(argnames='test_case',
+                                  argvalues=TEST_CASES_IDENTICAL,
+                                  ids=TEST_CASE_IDENTICAL_IDS)
 
 GROUPBY_ORDER_TYPES = {'no_order': {'groupby_columns': 'groupby'},
                        'no_groupby': {'order_columns': 'order'},
@@ -288,12 +295,15 @@ def test_groupby_multiple_intervals_null(wrangler, marker, shuffle,
 
     assert_pyspark_pandas_equality(test_output, expected)
 
-@pytest.mark.parametrize(**MARKERS_KWARGS)
-def test_identical_start_end_marker(marker, spark):
 
-    test_input, expected = identical_start_end_with_invalids(start=marker["start"],
-                                                             noise=marker["noise"],
-                                                             target_column_name="iids")
+@pytest.mark.parametrize(**TEST_CASE_IDENTICAL_KWARGS)
+@pytest.mark.parametrize(**MARKERS_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_identical_start_end_marker(wrangler, marker, test_case, spark):
+    test_input, expected = test_case(
+        start=marker["start"],
+        noise=marker["noise"],
+        target_column_name="iids")
 
     expected = pd.merge(test_input, expected, left_index=True,
                         right_index=True)
@@ -302,9 +312,9 @@ def test_identical_start_end_marker(marker, spark):
     kwargs = {"order_columns": "order",
               "groupby_columns": "groupby"}
 
-    wrangler_instance = VectorizedCumSum(marker_column="marker",
-                                         marker_start=marker["start"],
-                                         **kwargs)
+    wrangler_instance = wrangler(marker_column="marker",
+                                 marker_start=marker["start"],
+                                 **kwargs)
 
     test_output = wrangler_instance.fit_transform(test_input)
     assert_pyspark_pandas_equality(test_output, expected)
