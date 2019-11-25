@@ -24,7 +24,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
 
     """
 
-    def validate_input(self,  df: pd.DataFrame):
+    def validate_input(self, df: pd.DataFrame):
         """Checks input data frame in regard to column names and empty data.
 
         Parameters
@@ -60,10 +60,10 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         df_ordered = util.sort_values(df, self.order_columns, self.ascending)
         df_grouped = util.groupby(df_ordered, self.groupby_columns)
 
-        df_result = df_grouped[self.marker_column]\
-            .transform(self._transform)\
-            .astype(int)\
-            .reindex(df.index)\
+        df_result = df_grouped[self.marker_column] \
+            .transform(self._transform) \
+            .astype(int) \
+            .reindex(df.index) \
             .to_frame(self.target_column_name)
 
         # check output
@@ -85,7 +85,69 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
     """
 
+    def _is_start(self, value):
+        return value == self.marker_start
+
+    def _is_end(self, value):
+        return value == self.marker_end
+
+    def _is_valid_start(self, value, active):
+        """A valid start occurs if there is no active interval present (no
+        start marker was seen since last end marker).
+
+        """
+
+        return self._is_start(value) and not active
+
+    def _is_invalid_start(self, value, active):
+        """An invalid start occurs if there is already an active interval
+        present (start marker was seen since last end marker).
+
+        """
+
+        return self._is_start(value) and active
+
+    def _is_valid_end(self, value, active):
+        """A valid end is defined with `value` begin equal to the close
+        marker and `active` being unqual to 0 which means there is an
+        active interval.
+
+        """
+
+        return self._is_end(value) and active
+
     def _transform(self, series: pd.Series) -> List[int]:
+        """Selects appropriate algorithm depending on identical/different
+        start and end markers.
+
+        """
+
+        if self._identical_start_end_markers:
+            return self._transform_start_only(series)
+        else:
+            return self._transform_start_and_end(series)
+
+    def _transform_start_only(self, series: pd.Series) -> List[int]:
+        """Iterates given `series` testing each value against start marker
+        while increasing counter each time start marker is encountered.
+
+        Assumes that series is already ordered and grouped.
+
+        """
+
+        result = []
+        counter = 0
+
+        for value in series.values:
+            if self._is_start(value):
+                counter += 1
+
+            result.append(counter)
+
+        return result
+
+
+    def _transform_start_and_end(self, series: pd.Series) -> List[int]:
         """Iterates given `series` testing each value against start and end
         markers while keeping track of already instantiated intervals to
         separate valid from invalid intervals.
@@ -99,51 +161,20 @@ class NaiveIterator(_BaseIntervalIdentifier):
         intermediate = []  # stores intermediate results
         result = []  # keeps track of all results
 
-        def is_start(value):
-            return value == self.marker_start
-
-        def is_end(value):
-            return value == self.marker_end
-
-        def is_valid_start(value, active):
-            """A valid start occurs if there is no active interval present (no
-            start marker was seen since last end marker).
-
-            """
-
-            return is_start(value) and not active
-
-        def is_invalid_start(value, active):
-            """An invalid start occurs if there is already an active interval
-            present (start marker was seen since last end marker).
-
-            """
-
-            return is_start(value) and active
-
-        def is_valid_end(value, active):
-            """A valid end is defined with `value` begin equal to the close
-            marker and `active` being unqual to 0 which means there is an
-            active interval.
-
-            """
-
-            return is_end(value) and active
-
         for value in series.values:
 
-            if is_invalid_start(value, active):
+            if self._is_invalid_start(value, active):
                 # add invalid values to result (from previous begin marker)
                 result.extend([0] * len(intermediate))
 
                 # start new intermediate list
                 intermediate = [active]
 
-            elif is_valid_start(value, active):
+            elif self._is_valid_start(value, active):
                 active = counter + 1
                 intermediate.append(active)
 
-            elif is_valid_end(value, active):
+            elif self._is_valid_end(value, active):
                 # add valid interval to result
                 result.extend(intermediate)
                 result.append(active)
@@ -189,6 +220,10 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
 
         # get boolean series with start and end markers
         bool_start = series.eq(self.marker_start)
+
+        if self._identical_start_end_markers:
+            return bool_start.cumsum()
+
         bool_end = series.eq(self.marker_end)
 
         # shifting the close marker allows cumulative sum to include the end
