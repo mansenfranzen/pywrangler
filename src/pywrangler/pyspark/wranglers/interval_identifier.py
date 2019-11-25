@@ -76,7 +76,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
 
         # account for identical start and end markers
-        if self._naive_algorithm:
+        if self._identical_start_end_markers:
             ser_id = F.sum(bool_start).over(w_lag)
             return df.withColumn(self.target_column_name, ser_id)
 

@@ -122,7 +122,7 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
         """
 
-        if self._naive_algorithm:
+        if self._identical_start_end_markers:
             return self._transform_start_only(series)
         else:
             return self._transform_start_and_end(series)
@@ -221,7 +221,7 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
         # get boolean series with start and end markers
         bool_start = series.eq(self.marker_start)
 
-        if self._naive_algorithm:
+        if self._identical_start_end_markers:
             return bool_start.cumsum()
 
         bool_end = series.eq(self.marker_end)

@@ -44,7 +44,8 @@ class IntervalIdentifier(BaseWrangler):
     marker_start: Any
         A value defining the start of an interval.
     marker_end: Any, optional
-        A value defining the end of an interval, if necessary
+        A value defining the end of an interval. This value is optional. If not
+        given, the end marker equals the start marker.
     order_columns: str, Iterable[str], optional
         Column names which define the order of the data (e.g. a timestamp
         column). Sort order can be defined with the parameter `ascending`.
@@ -79,7 +80,8 @@ class IntervalIdentifier(BaseWrangler):
         self.target_column_name = target_column_name
 
         # check for identical start and end values
-        self._naive_algorithm = marker_end == NONEVALUE
+        self._identical_start_end_markers = ((marker_end == NONEVALUE) or
+                                             (marker_start == marker_end))
 
         # sanity checks for sort order
         if self.ascending:
