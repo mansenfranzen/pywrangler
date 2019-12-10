@@ -332,3 +332,9 @@ class TestDataTable:
 
         spark = SparkSession.builder.getOrCreate()
         return spark.createDataFrame(data=data, schema=schema)
+
+
+def assert_equal(left, right,
+                 check_column_order=False,
+                 check_row_order=False):
+    pass

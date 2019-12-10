@@ -7,7 +7,7 @@ import datetime
 import pytest
 
 import pandas as pd
-from numpy.testing import assert_equal
+from numpy.testing import assert_equal as np_assert_equal
 from pandas.api import types
 
 from pywrangler.base import BaseWrangler
@@ -15,6 +15,7 @@ from pywrangler.util.testing import (
     NULL,
     NaN,
     TestDataTable,
+    assert_equal,
     concretize_abstract_wrangler
 )
 
@@ -97,7 +98,7 @@ def test_pandas_converter(data_table):
     assert df["float"][1] == 2.0
 
     assert types.is_bool_dtype(df["bool"])
-    assert_equal(df["bool"][0], True)
+    np_assert_equal(df["bool"][0], True)
     assert df["bool"].isnull().sum() == 0
 
     assert types.is_object_dtype(df["str"])
@@ -200,3 +201,111 @@ def test_data_table_assertions():
                         [1, 2]],
                   columns=["a", "b"],
                   dtypes=["int", "int"])
+
+
+def create_test_table(cols, rows, reverse_cols=False, reverse_rows=False):
+    """Helper function to automatically create instances of TestDataTable.
+
+    """
+
+    if reverse_cols:
+        cols = cols[::-1]
+
+    dtypes, columns = zip(*[col.split("_") for col in cols])
+
+    values = list(range(1, rows + 1))
+    mapping = {"str": list(map(str, values)),
+               "int": values,
+               "float": list(map(float, values)),
+               "bool": list([x % 2 == 0 for x in values]),
+               "datetime": ["2019-01-{:02} 10:00:00".format(x) for x in
+                            values]}
+
+    data = [mapping[dtype] for dtype in dtypes]
+    data = list(zip(*data))
+
+    if reverse_rows:
+        data = data[::-1]
+
+    return TestDataTable(data=data,
+                         dtypes=dtypes,
+                         columns=columns)
+
+
+def create_test_table_special(values, dtype):
+    """Create some special scenarios more easily. Always assumes a single
+    column with identical name. Only values and dtype varies.
+
+    """
+
+    data = [[x] for x in values]
+    dtypes = [dtype]
+    columns = ["name"]
+
+    return TestDataTable(data=data, dtypes=dtypes, columns=columns)
+
+
+def test_assert_equal_basics():
+    # incorrect number of rows
+    with pytest.raises(AssertionError):
+        left = create_test_table(["int_a", "int_b"], 10)
+        right = create_test_table(["int_a", "int_b"], 5)
+        assert_equal(left, right)
+
+    # incorrect number of columns
+    with pytest.raises(AssertionError):
+        left = create_test_table(["int_a"], 10)
+        right = create_test_table(["int_a", "int_b"], 10)
+        assert_equal(left, right)
+
+    # incorrect column_names
+    with pytest.raises(AssertionError):
+        left = create_test_table(["int_a", "int_c"], 10)
+        right = create_test_table(["int_a", "int_b"], 10)
+        assert_equal(left, right)
+
+    # incorrect dtypes
+    with pytest.raises(AssertionError):
+        left = create_test_table(["int_a", "str_b"], 10)
+        right = create_test_table(["int_a", "int_b"], 10)
+        assert_equal(left, right)
+
+    # check column order
+    left = create_test_table(["int_a", "int_b"], 10, reverse_cols=True)
+    right = create_test_table(["int_a", "int_b"], 10)
+    assert_equal(left, right, check_column_order=False)
+
+    with pytest.raises(AssertionError):
+        assert_equal(left, right, check_column_order=True)
+
+    # check row order
+    left = create_test_table(["int_a", "int_b"], 10, reverse_rows=True)
+    right = create_test_table(["int_a", "int_b"], 10)
+    assert_equal(left, right, check_row_order=False)
+
+    with pytest.raises(AssertionError):
+        assert_equal(left, right, check_row_order=True)
+
+
+def test_assert_equal_nan_null():
+    # nan should be equal
+    left = create_test_table_special([NaN, 1], "float")
+    right = create_test_table_special([NaN, 1], "float")
+    assert_equal(left, right)
+
+    # Null should be equal
+    left = create_test_table_special([NULL, 1], "float")
+    right = create_test_table_special([NULL, 1], "float")
+    assert_equal(left, right)
+
+    # null should be different from other values
+    with pytest.raises(AssertionError):
+        left = create_test_table_special(["2019-01-01"], "datetime")
+        right = create_test_table_special([NULL], "datetime")
+        assert_equal(left, right)
+
+    # nan should be different from other values
+    with pytest.raises(AssertionError):
+        left = create_test_table_special([1.1], "float")
+        right = create_test_table_special([NaN], "float")
+        assert_equal(left, right)
