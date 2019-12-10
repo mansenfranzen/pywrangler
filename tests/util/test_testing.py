@@ -7,6 +7,7 @@ import datetime
 import pytest
 
 import pandas as pd
+from numpy.testing import assert_equal
 from pandas.api import types
 
 from pywrangler.base import BaseWrangler
@@ -96,7 +97,7 @@ def test_pandas_converter(data_table):
     assert df["float"][1] == 2.0
 
     assert types.is_bool_dtype(df["bool"])
-    assert df["bool"][0] is True
+    assert_equal(df["bool"][0], True)
     assert df["bool"].isnull().sum() == 0
 
     assert types.is_object_dtype(df["str"])
