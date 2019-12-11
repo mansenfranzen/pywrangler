@@ -1,13 +1,15 @@
 """This module contains testing utility.
 
 """
+import collections
 import numbers
 from datetime import datetime
-from typing import Iterable, Tuple, Type
+from typing import Iterable, List, Tuple, Type
 
 import dateutil
 import numpy as np
 import pandas as pd
+from numpy.testing import assert_equal
 
 
 def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
@@ -265,6 +267,97 @@ class TestDataColumn:
                                 .format(value, type(value), allowed_types))
 
 
+class EqualityAsserter:
+    """Collection of equality assertions as a composite of TestDataTable. It
+    contains equality tests in regard to number of rows, columns, dtypes etc.
+
+    """
+
+    def __init__(self, parent: 'TestDataTable'):
+        self.parent = parent
+
+    def __call__(self,
+                 other: 'TestDataTable',
+                 assert_column_order: bool = False,
+                 assert_row_order: bool = False):
+        """Main entry point for equality assertion. By default, no strict
+        column nor row order is assumed but may be enabled.
+
+        Parameters
+        ----------
+        other: TestDataTable
+            Instance to assert equality against.
+        assert_column_order: bool, optional
+            If enabled, column order will be tested. Otherwise, column order
+            does not matter for equality assertion.
+        assert_row_order: bool, optional
+            If enabled, row order will be tested. Otherwise, row order does not
+            matter for equality assertion.
+
+        """
+
+        self._assert_shape(other)
+        self._assert_column_names(other, assert_column_order)
+        self._assert_dtypes(other)
+
+        if not assert_row_order:
+            order_left = self._get_row_order(self.parent)
+            order_right = self._get_row_order(other)
+
+        for column in self.parent.columns:
+            left = self.parent._columns[column].values
+            right = other._columns[column].values
+
+            if not assert_row_order:
+                left = [left[idx] for idx in order_left]
+                right = [right[idx] for idx in order_right]
+
+            assert_equal(left, right)
+
+    def _assert_shape(self, other: 'TestDataTable'):
+        """Check for identical shape
+
+        """
+
+        assert self.parent.n_rows == other.n_rows
+        assert self.parent.n_cols == other.n_cols
+
+    def _assert_column_names(self,
+                             other: 'TestDataTable',
+                             assert_column_order: bool):
+        """Check for matching column names. Take column order into account if
+        required.
+
+        """
+
+        if assert_column_order:
+            assert self.parent.columns == other.columns
+        else:
+            assert set(self.parent.columns) == set(other.columns)
+
+    def _assert_dtypes(self, other: 'TestDataTable'):
+        """Check for matching dtypes.
+
+        """
+
+        left_dtypes = {name: column.dtype
+                       for name, column in self.parent._columns.items()}
+
+        right_dtypes = {name: column.dtype
+                        for name, column in other._columns.items()}
+
+        assert left_dtypes == right_dtypes
+
+    @staticmethod
+    def _get_row_order(table: 'TestDataTable') -> List[int]:
+        """Helper function to get index order of sorted data.
+
+        """
+
+        indices = range(table.n_rows)
+        return sorted(indices, key=lambda k: table.data[k])
+
+
 class TestDataTable:
     """Resembles a dataframe in plain python. Its main purpose is to represent
     test data that is independent of any computation engine specific
@@ -276,7 +369,9 @@ class TestDataTable:
 
     The main focus lies on correct data representation. This includes explicit
     values for NULL and NaN. Each column needs to be typed. For simplicity,
-    all values will be represented as plain python types (no 3rd party).
+    all values will be represented as plain python types (no 3rd party). It is
+    not intended to be used for lots of data due to its representation in plain
+    python objects.
 
     Essentially, a test dataframe consists of only 3 attributes: column names,
     column types and column values. In addition, it provides conversion methods
@@ -290,43 +385,33 @@ class TestDataTable:
                  columns: Iterable[str],
                  dtypes: Iterable[str]):
 
-        # assert equal number of elements across rows
-        row_lenghts = {len(row) for row in data}
-        if len(row_lenghts) > 1:
-            raise ValueError("Input data has varying number of values per "
-                             "row. Please check provided input data")
+        # set attributes
+        self.data = data
+        self.columns = columns
+        self.dtypes = dtypes
 
-        # assert equal number of columns and elements per row
-        row_lenghts.add(len(columns))
-        if len(row_lenghts) > 1:
-            raise ValueError("Number of columns has to equal the number of "
-                             "values per row. Please check column names and "
-                             "provided input data.")
+        # validate inputs
+        self._validata_inputs()
 
-        # assert equal number of dtypes and elements per row
-        row_lenghts.add(len(dtypes))
-        if len(row_lenghts) > 1:
-            raise ValueError("Number of dtypes has to equal the number of "
-                             "values per row. Please check dtypes and "
-                             "provided input data.")
-
-        # assert valid dtypes
-        for dtype in dtypes:
-            if dtype not in TYPES:
-                raise ValueError("Type '{}' is invalid. Following types are "
-                                 "allowed: {}"
-                                 .format(dtype, TYPES.keys()))
+        # convenient attributes
+        self.n_rows = len(data)
+        self.n_cols = len(columns)
 
         zipped = zip(columns, dtypes, zip(*data))
-        self._columns = [TestDataColumn(column, dtype, data)
-                         for column, dtype, data in zipped]
+        _columns = [(column, TestDataColumn(column, dtype, data))
+                    for column, dtype, data in zipped]
+        self._columns = collections.OrderedDict(_columns)
+
+        self.assert_equal = EqualityAsserter(self)
 
     def to_pandas(self) -> pd.DataFrame:
         """Converts test data table into a pandas dataframe.
 
         """
 
-        data = {column.name: column.to_pandas() for column in self._columns}
+        data = {name: column.to_pandas()
+                for name, column in self._columns.items()}
+
         return pd.DataFrame(data)
 
     def to_pyspark(self):
@@ -337,7 +422,7 @@ class TestDataTable:
         from pyspark.sql import SparkSession
         from pyspark.sql import types
 
-        converted = [column.to_pyspark() for column in self._columns]
+        converted = [column.to_pyspark() for column in self._columns.values()]
         fields, values = zip(*converted)
 
         data = list(zip(*values))
@@ -346,8 +431,41 @@ class TestDataTable:
         spark = SparkSession.builder.getOrCreate()
         return spark.createDataFrame(data=data, schema=schema)
 
+    def _validata_inputs(self):
+        """Check input parameter in regard to validity constraints.
 
-def assert_equal(left, right,
-                 check_column_order=False,
-                 check_row_order=False):
-    pass
+        """
+
+        # assert equal number of elements across rows
+        row_lenghts = {len(row) for row in self.data}
+        if len(row_lenghts) > 1:
+            raise ValueError("Input data has varying number of values per "
+                             "row. Please check provided input data")
+
+        # assert equal number of columns and elements per row
+        row_lenghts.add(len(self.columns))
+        if len(row_lenghts) > 1:
+            raise ValueError("Number of columns has to equal the number of "
+                             "values per row. Please check column names and "
+                             "provided input data.")
+
+        # assert equal number of dtypes and elements per row
+        row_lenghts.add(len(self.dtypes))
+        if len(row_lenghts) > 1:
+            raise ValueError("Number of dtypes has to equal the number of "
+                             "values per row. Please check dtypes and "
+                             "provided input data.")
+
+        # assert valid dtypes
+        for dtype in self.dtypes:
+            if dtype not in TYPES:
+                raise ValueError("Type '{}' is invalid. Following types are "
+                                 "allowed: {}"
+                                 .format(dtype, TYPES.keys()))
+
+        # assert unique column names
+        duplicates = {x for x in self.columns if self.columns.count(x) > 1}
+        if duplicates:
+            raise ValueError("Duplicated column names encountered: {}. "
+                             "Please use unique column names."
+                             .format(duplicates))
