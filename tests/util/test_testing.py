@@ -15,7 +15,6 @@ from pywrangler.util.testing import (
     NULL,
     NaN,
     TestDataTable,
-    assert_equal,
     concretize_abstract_wrangler
 )
 
@@ -246,66 +245,77 @@ def create_test_table_special(values, dtype):
 
 
 def test_assert_equal_basics():
+    # equal values should be equal
+    left = create_test_table(["int_a", "int_b"], 10)
+    right = create_test_table(["int_a", "int_b"], 10)
+    left.assert_equal(right)
+
+    # different values should not be equal
+    left = create_test_table_special([1, 2], "int")
+    right = create_test_table_special([2, 3], "int")
+    with pytest.raises(AssertionError):
+        left.assert_equal(right)
+
     # incorrect number of rows
     with pytest.raises(AssertionError):
         left = create_test_table(["int_a", "int_b"], 10)
         right = create_test_table(["int_a", "int_b"], 5)
-        assert_equal(left, right)
+        left.assert_equal(right)
 
     # incorrect number of columns
     with pytest.raises(AssertionError):
         left = create_test_table(["int_a"], 10)
         right = create_test_table(["int_a", "int_b"], 10)
-        assert_equal(left, right)
+        left.assert_equal(right)
 
     # incorrect column_names
     with pytest.raises(AssertionError):
         left = create_test_table(["int_a", "int_c"], 10)
         right = create_test_table(["int_a", "int_b"], 10)
-        assert_equal(left, right)
+        left.assert_equal(right)
 
     # incorrect dtypes
     with pytest.raises(AssertionError):
         left = create_test_table(["int_a", "str_b"], 10)
         right = create_test_table(["int_a", "int_b"], 10)
-        assert_equal(left, right)
+        left.assert_equal(right)
 
     # check column order
     left = create_test_table(["int_a", "int_b"], 10, reverse_cols=True)
     right = create_test_table(["int_a", "int_b"], 10)
-    assert_equal(left, right, check_column_order=False)
+    left.assert_equal(right, assert_column_order=False)
 
     with pytest.raises(AssertionError):
-        assert_equal(left, right, check_column_order=True)
+        left.assert_equal(right, assert_column_order=True)
 
     # check row order
     left = create_test_table(["int_a", "int_b"], 10, reverse_rows=True)
     right = create_test_table(["int_a", "int_b"], 10)
-    assert_equal(left, right, check_row_order=False)
+    left.assert_equal(right, assert_row_order=False)
 
     with pytest.raises(AssertionError):
-        assert_equal(left, right, check_row_order=True)
+        left.assert_equal(right, assert_row_order=True)
 
 
-def test_assert_equal_nan_null():
+def test_assert_equal_special():
     # nan should be equal
     left = create_test_table_special([NaN, 1], "float")
     right = create_test_table_special([NaN, 1], "float")
-    assert_equal(left, right)
+    left.assert_equal(right)
 
     # Null should be equal
     left = create_test_table_special([NULL, 1], "float")
     right = create_test_table_special([NULL, 1], "float")
-    assert_equal(left, right)
+    left.assert_equal(right)
 
     # null should be different from other values
     with pytest.raises(AssertionError):
         left = create_test_table_special(["2019-01-01"], "datetime")
         right = create_test_table_special([NULL], "datetime")
-        assert_equal(left, right)
+        left.assert_equal(right)
 
     # nan should be different from other values
     with pytest.raises(AssertionError):
         left = create_test_table_special([1.1], "float")
         right = create_test_table_special([NaN], "float")
-        assert_equal(left, right)
+        left.assert_equal(right)
