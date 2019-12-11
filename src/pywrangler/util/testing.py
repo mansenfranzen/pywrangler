@@ -52,12 +52,25 @@ def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
 
 
 class NullValue:
-    """Represents null values.
+    """Represents null values. Provides operator comparison functions to allow
+    sorting which is required to determine row order of data tables.
 
     """
 
     def __str__(self):
         return "NULL"
+
+    def __lt__(self, other):
+        return self
+
+    def __gt__(self, other):
+        return other
+
+    def __eq__(self, other):
+        return isinstance(other, NullValue)
+
+    def __ne__(self, other):
+        return self.__eq__(other) is False
 
 
 NaN = np.NaN
