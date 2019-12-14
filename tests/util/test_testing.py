@@ -7,6 +7,7 @@ import datetime
 import pytest
 
 import pandas as pd
+import numpy as np
 from numpy.testing import assert_equal as np_assert_equal
 from pandas.api import types
 
@@ -319,3 +320,114 @@ def test_assert_equal_special():
         left = create_test_table_special([1.1], "float")
         right = create_test_table_special([NaN], "float")
         left.assert_equal(right)
+
+
+@pytest.fixture
+def pd_convert_dataframe():
+    df = pd.DataFrame(
+        {"int": [1, 2],
+         "int_na": [1, np.NaN],
+         "bool": [True, False],
+         "bool_na": [True, np.NaN],
+         "float": [1.2, 1.3],
+         "float_na": [1.2, np.NaN],
+         "str": ["foo", "bar"],
+         "str_na": ["foo", np.NaN],
+         "datetime": [pd.Timestamp("2019-01-01"), pd.Timestamp("2019-01-02")],
+         "datetime_na": [pd.Timestamp("2019-01-01"), pd.NaT]})
+
+    return df
+
+
+def test_testdatatable_from_pandas(pd_convert_dataframe):
+    df = pd_convert_dataframe
+    df_conv = TestDataTable.from_pandas(df)
+
+    # check int to int
+    assert df_conv["int"].dtype == "int"
+    assert df_conv["int"].values == (1, 2)
+
+    # check bool to bool
+    assert df_conv["bool"].dtype == "bool"
+    assert df_conv["bool"].values == (True, False)
+
+    # check bool (object) to bool with nan
+    assert df_conv["bool_na"].dtype == "bool"
+    assert df_conv["bool_na"].values == (True, NULL)
+
+    # check float to float
+    assert df_conv["float"].dtype == "float"
+    assert df_conv["float"].values == (1.2, 1.3)
+
+    # check float to float with nan
+    assert df_conv["float_na"].dtype == "float"
+    np_assert_equal(df_conv["float_na"].values, (1.2, NaN))
+
+    # check str to str
+    assert df_conv["str"].dtype == "str"
+    assert df_conv["str"].values == ("foo", "bar")
+
+    # check str to str with nan
+    assert df_conv["str_na"].dtype == "str"
+    assert df_conv["str_na"].values == ("foo", NULL)
+
+    # check datetime to datetime
+    assert df_conv["datetime"].dtype == "datetime"
+    assert df_conv["datetime"].values == (datetime.datetime(2019, 1, 1),
+                                          datetime.datetime(2019, 1, 2))
+    # check datetime to datetime with nan
+    assert df_conv["datetime_na"].dtype == "datetime"
+    assert df_conv["datetime_na"].values == (datetime.datetime(2019, 1, 1),
+                                             NULL)
+
+
+def test_testdatatable_from_pandas_special():
+    # check mixed dtype raise
+    df = pd.DataFrame({"mixed": [1, "foo bar"]})
+    with pytest.raises(TypeError):
+        TestDataTable.from_pandas(df)
+
+    # check assertion for incorrect forces
+    # too many types provided
+    with pytest.raises(ValueError):
+        TestDataTable.from_pandas(df, dtypes=["int", "str"])
+
+    with pytest.raises(ValueError):
+        TestDataTable.from_pandas(df, dtypes={"mixed": "str",
+                                              "dummy": "int"})
+
+    # invalid dtypes provided
+    with pytest.raises(ValueError):
+        TestDataTable.from_pandas(df, dtypes=["not existant type"])
+
+    with pytest.raises(ValueError):
+        TestDataTable.from_pandas(df, dtypes={"mixed": "not existant type"})
+
+    # invalid column names provided
+    with pytest.raises(ValueError):
+        TestDataTable.from_pandas(df, dtypes={"dummy": "str"})
+
+    # check int to forced int with nan
+    df = pd.DataFrame({"int": [1, np.NaN]})
+    df_conv = TestDataTable.from_pandas(df, dtypes=["int"])
+    assert df_conv["int"].dtype == "int"
+    assert df_conv["int"].values == (1, NULL)
+
+    # check force int to float
+    df = pd.DataFrame({"int": [1, 2]})
+    df_conv = TestDataTable.from_pandas(df, dtypes=["float"])
+    assert df_conv["int"].dtype == "float"
+    assert df_conv["int"].values == (1.0, 2.0)
+
+    # check force float to int
+    df = pd.DataFrame({"float": [1.0, 2.0]})
+    df_conv = TestDataTable.from_pandas(df, dtypes=["int"])
+    assert df_conv["float"].dtype == "int"
+    assert df_conv["float"].values == (1, 2)
+
+    # check force str to datetime
+    df = pd.DataFrame({"datetime": ["2019-01-01", "2019-01-02"]})
+    df_conv = TestDataTable.from_pandas(df, dtypes=["datetime"])
+    assert df_conv["datetime"].dtype == "datetime"
+    assert df_conv["datetime"].values == (datetime.datetime(2019, 1, 1),
+                                          datetime.datetime(2019, 1, 2))

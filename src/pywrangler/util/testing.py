@@ -161,7 +161,292 @@ class ConverterPySpark:
         return field, self.sanitized
 
 
-class ConverterPandas:
+class ConverterFromPandas:
+    """Convert pandas dataframe into plain TestDataTable.
+
+    """
+
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+
+    def __call__(self,
+                 dtypes: Optional[TYPE_DTYPE_INPUT] = None) \
+            -> 'TestDataTable':
+        """Converts pandas dataframe to TestDataTable. Dtypes will be inferred
+        from pandas dataframe. However, dtypes may be provided explicitly
+        to overwrite inferred dtypes because pandas missing values (np.NaN)
+        always casts to type float (e.g. bool or int with missings will be
+        casted to float).
+
+        Parameters
+        ----------
+        dtypes: list, dict, optional
+            If list is provided, each value represents a dtype and maps to
+            one column of the dataframe in given order. If dict is provided,
+            keys refer to column names and values represent dtypes.
+
+        Returns
+        -------
+        datatable: TestDataTable
+            Converted dataframe.
+
+        """
+
+        dtypes_validated = self.get_forced_dtypes(dtypes)
+        dtypes_validated.update(self.get_object_dtypes(dtypes_validated))
+        dtypes_validated.update(self.get_inferred_dtypes(dtypes_validated))
+
+        columns = self.df.columns.tolist()
+        dtypes = [dtypes_validated[column] for column in columns]
+        data = [self.convert_series(column, dtypes_validated[column])
+                for column in columns]
+
+        data = list(zip(*data))
+
+        return TestDataTable(data=data,
+                             columns=self.df.columns.tolist(),
+                             dtypes=dtypes)
+
+    def get_forced_dtypes(self, dtypes: TYPE_DTYPE_INPUT) -> TYPE_DSTR:
+        """Validate user provided `dtypes` parameter.
+
+        Parameters
+        ----------
+        dtypes: list, dict
+            If list is provided, each value represents a dtype and maps to
+            one column of the dataframe in order. If dict is provided, keys
+            refer to column names and values represent dtypes.
+
+        Returns
+        -------
+        dtypes_forced: dict
+            Keys refer to column names and values represent dtypes.
+
+        """
+
+        if isinstance(dtypes, list):
+            if len(dtypes) != self.df.shape[1]:
+                raise ValueError("Length mismatch: Length of `dtypes` ({}) "
+                                 "has to equal the number of columns ({})."
+                                 .format(len(dtypes), self.df.shape[1]))
+
+            dtypes_forced = dict(zip(self.df.columns, dtypes))
+
+        elif isinstance(dtypes, dict):
+            dtypes_forced = dtypes
+
+        elif dtypes is not None:
+            raise ValueError("Parameter `dtypes` has to be of type `list` or "
+                             "`dict`. However, type `{}` is given."
+                             .format(type(dtypes)))
+
+        else:
+            dtypes_forced = {}
+
+        if dtypes_forced:
+            for column, dtype in dtypes_forced.items():
+                if column not in self.df.columns:
+                    raise ValueError("Column `{}` does not exist. Available "
+                                     "columns are: `{}`"
+                                     .format(column, self.df.columns))
+
+                if dtype not in TYPES:
+                    raise ValueError("Dtype `{}` is invalid. Valid dtypes "
+                                     "are: {}."
+                                     .format(dtype, TYPES.keys()))
+
+        return dtypes_forced
+
+    def get_object_dtypes(self, dtypes_validated: TYPE_DSTR) -> TYPE_DSTR:
+        """Inspect all columns of dtype object and ensure no mixed dtypes are
+        present. Raises type error otherwise. Ignores columns for which dtypes
+        are already explicitly set.
+
+        Parameters
+        ----------
+        dtypes_validated: dict
+            Represents already given column/dtype pairs. Keys refer to column
+            names and values represent dtypes.
+
+        Returns
+        -------
+        dtypes_object: dict
+            Keys refer to column names and values represent dtypes.
+
+        """
+
+        dtypes_object = {}
+
+        for column in self.df.columns:
+            if column in dtypes_validated:
+                continue
+
+            if types.is_object_dtype(self.df[column]):
+                dtypes_object[column] = self.inspect_dtype_object(column)
+
+        return dtypes_object
+
+    def get_inferred_dtypes(self, dtypes_validated: TYPE_DSTR) -> TYPE_DSTR:
+        """Get all dtypes for columns which have not been provided, yet.
+        Assumes that columns of dtype object are not present. Raises type error
+        otherwise.
+
+        Parameters
+        ----------
+        dtypes_validated: dict
+            Represents already given column/dtype pairs. Keys refer to column
+            names and values represent dtypes.
+
+        Returns
+        -------
+        dtypes_inferred: dict
+            Keys refer to column names and values represent dtypes.
+
+        """
+
+        dtypes_inferred = {}
+
+        for column in self.df.columns:
+            if column in dtypes_validated:
+                continue
+
+            dtypes_inferred[column] = self.inspect_dtype(self.df[column])
+
+        return dtypes_inferred
+
+    def convert_series(self, column: str, dtype: str) -> TYPE_ROW:
+        """Converts a column of pandas dataframe into TestDataTable readable
+        format with specified dtype (np.NaN to NULL, timestamps to
+        datetime.datetime).
+
+        Parameters
+        ----------
+        column: str
+            Identifier for column.
+        dtype: str
+            Dtype identifier.
+
+        Returns
+        -------
+        values: list
+            Converted pandas series as plain python objects.
+
+        """
+
+        series = self.df[column]
+
+        if dtype != "float":
+            series = series.fillna(NULL)
+
+        values = self.force_dtype(series, dtype)
+
+        return values
+
+    def inspect_dtype_object(self, column: str) -> str:
+        """Inspect series of dtype object and ensure no mixed dtypes are
+        present. Try to infer actual dtype after removing np.NaN distinguishing
+        dtypes bool and str.
+
+        Parameters
+        ----------
+        column: str
+            Identifier for column.
+
+        Returns
+        -------
+        dtype: str
+            Inferred dtype as string.
+
+        """
+
+        series = self.df[column].dropna()
+
+        # check for bool
+        try:
+            conv = pd.to_numeric(series)
+            return self.inspect_dtype(conv)
+        except ValueError:
+            pass
+
+        # check for mixed dtypes
+        dtypes = {type(x) for x in series}
+        if len(dtypes) > 1:
+            raise TypeError("Column `{}` has mixed dtypes: {}. Currently, "
+                            "this is not supported."
+                            .format(column, dtypes))
+
+        # check for string
+        if isinstance(series[0], str):
+            return "str"
+
+        # raise if unsupported dtype is encountered
+        raise TypeError("Column `{}` has dtype `{}` which is currently "
+                        "not supported."
+                        .format(column, type(series[0])))
+
+    @staticmethod
+    def inspect_dtype(series: pd.Series) -> str:
+        """Get appropriate dtype of pandas series. Checks against bool, int,
+        float and datetime. If dtype object is encountered, raises type error.
+
+        Parameters
+        ----------
+        series: pd.Series
+            pandas series column identifier.
+
+        Returns
+        -------
+        dtype: str
+            Inferred dtype as string.
+
+        """
+
+        mapping = {types.is_bool_dtype: "bool",
+                   types.is_integer_dtype: "int",
+                   types.is_float_dtype: "float",
+                   types.is_datetime64_any_dtype: "datetime"}
+
+        for check, result in mapping.items():
+            if check(series):
+                return result
+        else:
+            raise TypeError("Type is not understand for column '{}'. Allowed "
+                            "types are bool, int, float, str and datetime."
+                            .format(series.name))
+
+    @staticmethod
+    def force_dtype(series: pd.Series, dtype: str) -> TYPE_ROW:
+        """Attempts to convert values to provided type.
+
+        Parameters
+        ----------
+        series: pd.Series
+            Values in pandas representation.
+        dtype: str
+            Dtype identifier.
+
+
+        Returns
+        -------
+        values: list
+            Converted pandas series as plain python objects.
+
+
+        """
+
+        conv_funcs = {"bool": bool,
+                      "int": int,
+                      "float": float,
+                      "str": str,
+                      "datetime": lambda x: pd.to_datetime(x).to_pydatetime()}
+
+        conv_func = conv_funcs[dtype]
+
+        return [conv_func(x) if not isinstance(x, NullValue) else NULL
+                for x in series]
+
+
+class ConverterToPandas:
     """Collection of pandas conversion methods as a composite of
     TestDataColumn. It handles pandas specifics likes the missing distinction
     between NULL and NaN.
