@@ -2,12 +2,14 @@
 
 """
 import collections
+import copy
 import numbers
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
+import tabulate
 from numpy.testing import assert_equal
 from pandas.api import types
 
@@ -89,39 +91,7 @@ def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
     return ConcreteWrangler
 
 
-class NullValue:
-    """Represents null values. Provides operator comparison functions to allow
-    sorting which is required to determine row order of data tables.
-
-    """
-
-    def __str__(self):
-        return "NULL"
-
-    def __lt__(self, other):
-        return self
-
-    def __gt__(self, other):
-        return other
-
-    def __eq__(self, other):
-        return isinstance(other, NullValue)
-
-    def __ne__(self, other):
-        return self.__eq__(other) is False
-
-
-NaN = np.NaN
-NULL = NullValue()
-
-TYPES = {"bool": (bool, NullValue),
-         "int": (int, NullValue),
-         "float": (float, int, NullValue),
-         "str": (str, NullValue),
-         "datetime": (datetime, NullValue)}
-
-
-class ConverterPySpark:
+class ConverterToPySpark:
     """Collection of pyspark conversion methods as a composite of
     TestDataColumn. It handles spark specifics like NULL as None and proper
     type matching.
@@ -534,45 +504,54 @@ class TestDataColumn:
 
     """
 
-    def __init__(self, name: str, dtype: str, values: Iterable):
+    def __init__(self, name: str, dtype: str, values: tuple):
 
         self.name = name
         self.dtype = dtype
+
+        # preprocess
+        if dtype == "float":
+            values = self._preprocess_float(values)
+        elif dtype == "datetime":
+            values = self._preprocess_datetime(values)
+
         self.values = values
 
         # get null/nan flags
         self.has_null = any([x is NULL for x in values])
         self.has_nan = any([x is np.NaN for x in values])
 
-        # preprocess
-        if dtype == "float":
-            self._preprocess_float()
-        elif dtype == "datetime":
-            self._preprocess_datetime()
-
         # sanity check for dtypes
         self._check_dtype()
 
         # add composite converters
-        self.to_pandas = ConverterPandas(self)
-        self.to_pyspark = ConverterPySpark(self)
+        self.to_pandas = ConverterToPandas(self)
+        self.to_pyspark = ConverterToPySpark(self)
 
-    def _preprocess_datetime(self):
-        """Convenience method to allow timestamps to be of type string.
-        Converts known timestamp string format (dateutil) to datetime objects.
+    def _preprocess_datetime(self, values: tuple) \
+            -> Tuple[datetime, NullValue]:
+        """Convenience method to allow timestamps of various formats.
 
         """
 
-        self.values = [dateutil.parser.parse(x) if isinstance(x, str) else x
-                       for x in self.values]
+        processed = [pd.Timestamp(x).to_pydatetime()
+                     if not isinstance(x, NullValue)
+                     else x
+                     for x in values]
 
-    def _preprocess_float(self):
+        return tuple(processed)
+
+    def _preprocess_float(self, values: Tuple) -> Tuple[float, NullValue]:
         """Convenience method to ensure numeric values are casted to float.
 
         """
 
-        self.values = [float(x) if isinstance(x, numbers.Number) else x
-                       for x in self.values]
+        processed = [float(x)
+                     if isinstance(x, numbers.Number)
+                     else x
+                     for x in values]
+
+        return tuple(processed)
 
     def _check_dtype(self):
         """Ensures correct type of all values. Raises TypeError.
@@ -633,15 +612,23 @@ class EqualityAsserter:
                 left = [left[idx] for idx in order_left]
                 right = [right[idx] for idx in order_right]
 
-            assert_equal(left, right)
+            msg = "column=" + column
+            assert_equal(left, right, err_msg=msg)
 
     def _assert_shape(self, other: 'TestDataTable'):
         """Check for identical shape
 
         """
 
-        assert self.parent.n_rows == other.n_rows
-        assert self.parent.n_cols == other.n_cols
+        if self.parent.n_rows != other.n_rows:
+            raise AssertionError("Unequal number of rows: "
+                                 "left {} vs. right {}"
+                                 .format(self.parent.n_rows, other.n_rows))
+
+        if self.parent.n_cols != other.n_cols:
+            raise AssertionError("Unequal number of columns: "
+                                 "left {} vs right {}"
+                                 .format(self.parent.n_cols, other.n_cols))
 
     def _assert_column_names(self,
                              other: 'TestDataTable',
@@ -652,9 +639,30 @@ class EqualityAsserter:
         """
 
         if assert_column_order:
-            assert self.parent.columns == other.columns
+            enum = enumerate(zip(self.parent.columns, other.columns))
+            for idx, (left, right) in enum:
+                if left != right:
+                    raise AssertionError(
+                        "Mismatching column names at index {}: "
+                        "left '{}' vs. right '{}'"
+                            .format(idx + 1, left, right)
+                    )
         else:
-            assert set(self.parent.columns) == set(other.columns)
+            left = set(self.parent.columns)
+            right = set(other.columns)
+
+            if left != right:
+                left_exclusive = left.difference(right)
+                right_exclusive = right.difference(left)
+                msg = "Mismatching column names: "
+
+                if left_exclusive:
+                    msg += "Right does not have columns: {}. "
+
+                if right_exclusive:
+                    msg += "Left does not have columns: {}. "
+
+                raise AssertionError(msg)
 
     def _assert_dtypes(self, other: 'TestDataTable'):
         """Check for matching dtypes.
@@ -667,7 +675,15 @@ class EqualityAsserter:
         right_dtypes = {name: column.dtype
                         for name, column in other._columns.items()}
 
-        assert left_dtypes == right_dtypes
+        if left_dtypes != right_dtypes:
+            msg = "Mismatching types: "
+            for column, left_dtype in left_dtypes.items():
+                right_dtype = right_dtypes[column]
+                if left_dtype != right_dtype:
+                    msg += ("{} (left '{}' vs. right '{}'"
+                            .format(column, left_dtype, right_dtype))
+
+            raise AssertionError(msg)
 
     @staticmethod
     def _get_row_order(table: 'TestDataTable') -> List[int]:
@@ -688,11 +704,15 @@ class TestDataTable:
     data in an engine independent way only once and to employ it for all
     computation engines simultaneously.
 
-    The main focus lies on correct data representation. This includes explicit
-    values for NULL and NaN. Each column needs to be typed. For simplicity,
-    all values will be represented as plain python types (no 3rd party). It is
-    not intended to be used for lots of data due to its representation in plain
-    python objects.
+    The main focus lies on simple but correct data representation. This
+    includes explicit values for NULL and NaN. Each column needs to be typed.
+    For simplicity, all values will be represented as plain python types
+    (no 3rd party). Hence, it is not intended to be used for large amounts of
+    data due to its representation in plain python objects.
+
+    There are several limitations. No index column is supported (as in pandas).
+    Mixed dtypes are not supported (like dtype object in pandas). No
+    distinction is made between int32/int64 or single/double floats.
 
     Essentially, a test dataframe consists of only 3 attributes: column names,
     column types and column values. In addition, it provides conversion methods
@@ -702,9 +722,9 @@ class TestDataTable:
     """
 
     def __init__(self,
-                 data: Iterable[Iterable],
-                 columns: Iterable[str],
-                 dtypes: Iterable[str]):
+                 data: List[List],
+                 columns: List[str],
+                 dtypes: List[str]):
 
         # set attributes
         self.data = data
@@ -790,3 +810,65 @@ class TestDataTable:
             raise ValueError("Duplicated column names encountered: {}. "
                              "Please use unique column names."
                              .format(duplicates))
+
+    @staticmethod
+    def from_pandas(df: pd.DataFrame, dtypes: TYPE_DTYPE_INPUT = None) \
+            -> 'TestDataTable':
+        """Converts pandas dataframe into TestDataTabble.
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+            Dataframe to be converted.
+        dtypes: list, dict, optional
+            If list is provided, each value represents a dtype and maps to
+            one column of the dataframe in given order. If dict is provided,
+            keys refer to column names and values represent dtypes.
+
+        Returns
+        -------
+        datatable: TestDataTable
+            Converted dataframe
+
+        """
+
+        converter = ConverterFromPandas(df)
+
+        return converter(dtypes=dtypes)
+
+    def __getitem__(self, name: str) -> TestDataColumn:
+        """Convenient access to TestDataColumn via column name.
+
+        Parameters
+        ----------
+        name: str
+            Label identifier for columns.
+
+        Returns
+        -------
+        column: TestDataColumn
+
+        """
+
+        return self._columns[name]
+
+    def __repr__(self):
+        """Represent table as ASCII representation.
+
+        """
+
+        headers = ["{}\n({})".format(column, dtype)
+                   for column, dtype in zip(self.columns, self.dtypes)]
+
+        preserve = copy.copy(tabulate.MIN_PADDING)
+        tabulate.MIN_PADDING = 0
+
+        repr = tabulate.tabulate(tabular_data=self.data,
+                                 headers=headers,
+                                 numalign="center",
+                                 stralign="center",
+                                 tablefmt="psql",
+                                 showindex="always")
+
+        tabulate.MIN_PADDING = preserve
+        return repr
