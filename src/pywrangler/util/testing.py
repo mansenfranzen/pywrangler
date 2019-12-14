@@ -4,12 +4,48 @@
 import collections
 import numbers
 from datetime import datetime
-from typing import Iterable, List, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, Union
 
-import dateutil
 import numpy as np
 import pandas as pd
 from numpy.testing import assert_equal
+from pandas.api import types
+
+
+class NullValue:
+    """Represents null values. Provides operator comparison functions to allow
+    sorting which is required to determine row order of data tables.
+
+    """
+
+    def __str__(self):
+        return "NULL"
+
+    def __lt__(self, other):
+        return self
+
+    def __gt__(self, other):
+        return other
+
+    def __eq__(self, other):
+        return isinstance(other, NullValue)
+
+    def __ne__(self, other):
+        return self.__eq__(other) is False
+
+
+NaN = np.NaN
+NULL = NullValue()
+
+TYPE_ROW = List[Union[bool, int, float, str, datetime, NullValue]]
+TYPE_DSTR = Dict[str, str]
+TYPE_DTYPE_INPUT = Union[List[str], TYPE_DSTR]
+
+TYPES = {"bool": (bool, NullValue),
+         "int": (int, NullValue),
+         "float": (float, int, NullValue),
+         "str": (str, NullValue),
+         "datetime": (datetime, NullValue)}
 
 
 def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
