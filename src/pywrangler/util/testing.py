@@ -5,13 +5,18 @@ import collections
 import copy
 import numbers
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
 import tabulate
 from numpy.testing import assert_equal
 from pandas.api import types
+
+try:
+    import pyspark
+except ImportError:
+    pyspark = None
 
 
 class NullValue:
@@ -50,45 +55,72 @@ TYPES = {"bool": (bool, NullValue),
          "datetime": (datetime, NullValue)}
 
 
-def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
-    """Makes abstract wrangler classes instantiable for testing purposes by
-    implementing abstract methods of `BaseWrangler`.
-
-    Parameters
-    ----------
-    wrangler_class: Type
-        Class object to inherit from while overriding abstract methods.
-
-    Returns
-    -------
-    concrete_class: Type
-        Concrete class usable for testing.
+class ConverterFromPySpark:
+    """Convert pyspark dataframe into plain TestDataTable.
 
     """
 
-    class ConcreteWrangler(wrangler_class):
+    TYPE_MAPPING = {"smallint": "int",
+                    "int": "int",
+                    "bigint": "int",
+                    "boolean": "bool",
+                    "single": "float",
+                    "double": "float",
+                    "string": "str",
+                    "timestamp": "datetime",
+                    "date": "datetime"}
 
-        @property
-        def preserves_sample_size(self):
-            return super().preserves_sample_size
+    def __init__(self, df: 'pyspark.sql.DataFrame'):
+        self.df = df
 
-        @property
-        def computation_engine(self):
-            return super().computation_engine
+    def __call__(self) -> 'TestDataTable':
+        """Converts pyspark dataframe to TestDataTable. Several types are not
+        supported including BinaryType, DecimalType, ByteType, ArrayType and
+        MapType.
 
-        def fit(self, *args, **kwargs):
-            return super().fit(*args, **kwargs)
+        Returns
+        -------
+        datatable: TestDataTable
+            Converted dataframe.
 
-        def fit_transform(self, *args, **kwargs):
-            return super().fit_transform(*args, **kwargs)
+        """
 
-        def transform(self, *args, **kwargs):
-            return super().transform(*args, **kwargs)
+        data = list(map(self.convert_null, self.df.collect()))
+        columns, dtypes = self.get_column_dtypes()
 
-    ConcreteWrangler.__name__ = wrangler_class.__name__
-    ConcreteWrangler.__doc__ = wrangler_class.__doc__
+        return TestDataTable(data=data, columns=columns, dtypes=dtypes)
 
-    return ConcreteWrangler
+    def get_column_dtypes(self) -> Tuple[List[str]]:
+        """Get column names and corresponding dtypes.
+
+        """
+
+        columns, pyspark_dtypes = zip(*self.df.dtypes)
+
+        # check unsupported pyspark dtypes
+        unsupported = set(pyspark_dtypes).difference(self.TYPE_MAPPING.keys())
+        if unsupported:
+            raise ValueError("Unsupported dtype encountered: {}."
+                             .format(unsupported))
+
+        dtypes = [self.TYPE_MAPPING[dtype] for dtype in pyspark_dtypes]
+
+        return columns, dtypes
+
+    @staticmethod
+    def convert_null(values: Iterable) -> list:
+        """Substitutes python `None` with NULL values.
+
+        Parameters
+        ----------
+        values: iterable
+
+        """
+
+        return [x
+                if x is not None
+                else NULL
+                for x in values]
 
 
 class ConverterToPySpark:
@@ -645,7 +677,7 @@ class EqualityAsserter:
                     raise AssertionError(
                         "Mismatching column names at index {}: "
                         "left '{}' vs. right '{}'"
-                            .format(idx + 1, left, right)
+                        .format(idx + 1, left, right)
                     )
         else:
             left = set(self.parent.columns)
@@ -836,6 +868,26 @@ class TestDataTable:
 
         return converter(dtypes=dtypes)
 
+    @staticmethod
+    def from_pyspark(df: 'pyspark.sql.DataFrame') -> 'TestDataTable':
+        """Converts pandas dataframe into TestDataTabble.
+
+        Parameters
+        ----------
+        df: pyspark.sql.DataFrame
+            Dataframe to be converted.
+
+        Returns
+        -------
+        datatable: TestDataTable
+            Converted dataframe
+
+        """
+
+        converter = ConverterFromPySpark(df)
+
+        return converter()
+
     def __getitem__(self, name: str) -> TestDataColumn:
         """Convenient access to TestDataColumn via column name.
 
@@ -872,3 +924,44 @@ class TestDataTable:
 
         tabulate.MIN_PADDING = preserve
         return repr
+
+
+def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
+    """Makes abstract wrangler classes instantiable for testing purposes by
+    implementing abstract methods of `BaseWrangler`.
+
+    Parameters
+    ----------
+    wrangler_class: Type
+        Class object to inherit from while overriding abstract methods.
+
+    Returns
+    -------
+    concrete_class: Type
+        Concrete class usable for testing.
+
+    """
+
+    class ConcreteWrangler(wrangler_class):
+
+        @property
+        def preserves_sample_size(self):
+            return super().preserves_sample_size
+
+        @property
+        def computation_engine(self):
+            return super().computation_engine
+
+        def fit(self, *args, **kwargs):
+            return super().fit(*args, **kwargs)
+
+        def fit_transform(self, *args, **kwargs):
+            return super().fit_transform(*args, **kwargs)
+
+        def transform(self, *args, **kwargs):
+            return super().transform(*args, **kwargs)
+
+    ConcreteWrangler.__name__ = wrangler_class.__name__
+    ConcreteWrangler.__doc__ = wrangler_class.__doc__
+
+    return ConcreteWrangler
