@@ -48,11 +48,11 @@ TYPE_ROW = List[Union[bool, int, float, str, datetime, NullValue]]
 TYPE_DSTR = Dict[str, str]
 TYPE_DTYPE_INPUT = Union[List[str], TYPE_DSTR]
 
-TYPES = {"bool": (bool, NullValue),
-         "int": (int, NullValue),
-         "float": (float, int, NullValue),
-         "str": (str, NullValue),
-         "datetime": (datetime, NullValue)}
+PRIMITIVE_TYPES = {"bool": (bool, NullValue),
+                   "int": (int, NullValue),
+                   "float": (float, int, NullValue),
+                   "str": (str, NullValue),
+                   "datetime": (datetime, NullValue)}
 
 
 class ConverterFromPySpark:
@@ -252,10 +252,10 @@ class ConverterFromPandas:
                                      "columns are: `{}`"
                                      .format(column, self.df.columns))
 
-                if dtype not in TYPES:
+                if dtype not in PRIMITIVE_TYPES:
                     raise ValueError("Dtype `{}` is invalid. Valid dtypes "
                                      "are: {}."
-                                     .format(dtype, TYPES.keys()))
+                                     .format(dtype, PRIMITIVE_TYPES.keys()))
 
         return dtypes_forced
 
@@ -590,7 +590,7 @@ class TestDataColumn:
 
         """
 
-        allowed_types = TYPES[self.dtype]
+        allowed_types = PRIMITIVE_TYPES[self.dtype]
 
         for value in self.values:
             if not isinstance(value, allowed_types):
@@ -744,7 +744,9 @@ class TestDataTable:
 
     There are several limitations. No index column is supported (as in pandas).
     Mixed dtypes are not supported (like dtype object in pandas). No
-    distinction is made between int32/int64 or single/double floats.
+    distinction is made between int32/int64 or single/double floats. Only
+    primitive/atomic types are supported (pyspark's ArrayType or MapType are
+    currently not supported).
 
     Essentially, a test dataframe consists of only 3 attributes: column names,
     column types and column values. In addition, it provides conversion methods
@@ -831,10 +833,10 @@ class TestDataTable:
 
         # assert valid dtypes
         for dtype in self.dtypes:
-            if dtype not in TYPES:
+            if dtype not in PRIMITIVE_TYPES:
                 raise ValueError("Type '{}' is invalid. Following types are "
                                  "allowed: {}"
-                                 .format(dtype, TYPES.keys()))
+                                 .format(dtype, PRIMITIVE_TYPES.keys()))
 
         # assert unique column names
         duplicates = {x for x in self.columns if self.columns.count(x) > 1}
