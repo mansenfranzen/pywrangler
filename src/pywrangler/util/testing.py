@@ -412,10 +412,10 @@ class ConverterFromPandas:
         for check, result in mapping.items():
             if check(series):
                 return result
-        else:
-            raise TypeError("Type is not understand for column '{}'. Allowed "
-                            "types are bool, int, float, str and datetime."
-                            .format(series.name))
+
+        raise TypeError("Type is not understand for column '{}'. Allowed "
+                        "types are bool, int, float, str and datetime."
+                        .format(series.name))
 
     @staticmethod
     def force_dtype(series: pd.Series, dtype: str) -> TYPE_ROW:
@@ -561,8 +561,9 @@ class TestDataColumn:
         self.to_pandas = ConverterToPandas(self)
         self.to_pyspark = ConverterToPySpark(self)
 
-    def _preprocess_datetime(self, values: tuple) \
-            -> Tuple[datetime, NullValue]:
+    @staticmethod
+    def _preprocess_datetime(values: tuple) \
+            -> Tuple[Union[datetime, NullValue]]:
         """Convenience method to allow timestamps of various formats.
 
         """
@@ -574,7 +575,8 @@ class TestDataColumn:
 
         return tuple(processed)
 
-    def _preprocess_float(self, values: Tuple) -> Tuple[float, NullValue]:
+    @staticmethod
+    def _preprocess_float(values: Tuple) -> Tuple[Union[float, NullValue]]:
         """Convenience method to ensure numeric values are casted to float.
 
         """
@@ -919,15 +921,15 @@ class TestDataTable:
         preserve = copy.copy(tabulate.MIN_PADDING)
         tabulate.MIN_PADDING = 0
 
-        repr = tabulate.tabulate(tabular_data=self.data,
-                                 headers=headers,
-                                 numalign="center",
-                                 stralign="center",
-                                 tablefmt="psql",
-                                 showindex="always")
+        _repr = tabulate.tabulate(tabular_data=self.data,
+                                  headers=headers,
+                                  numalign="center",
+                                  stralign="center",
+                                  tablefmt="psql",
+                                  showindex="always")
 
         tabulate.MIN_PADDING = preserve
-        return repr
+        return _repr
 
 
 def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
