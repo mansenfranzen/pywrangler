@@ -2,14 +2,14 @@
 
 """
 
+import collections
 import datetime
 
 import pytest
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from numpy.testing import assert_equal as np_assert_equal
-from pandas.api import types
 
 from pywrangler.base import BaseWrangler
 from pywrangler.util.testing import (
@@ -87,6 +87,7 @@ def test_spark_converter(data_table_miss):
 
 
 def test_pandas_converter(data_table):
+    from pandas.api import types
     df = data_table.to_pandas()
 
     assert types.is_integer_dtype(df["int"])
@@ -111,6 +112,8 @@ def test_pandas_converter(data_table):
 
 
 def test_pandas_converter_missings(data_table_miss):
+    from pandas.api import types
+
     df = data_table_miss.to_pandas()
 
     assert types.is_float_dtype(df["int"])
@@ -431,3 +434,90 @@ def test_testdatatable_from_pandas_special():
     assert df_conv["datetime"].dtype == "datetime"
     assert df_conv["datetime"].values == (datetime.datetime(2019, 1, 1),
                                           datetime.datetime(2019, 1, 2))
+
+
+@pytest.fixture
+def spark_test_table(spark):
+    from pyspark.sql import types
+
+    values = collections.OrderedDict(
+        {"int": [1, 2, None],
+         "smallint": [1, 2, None],
+         "bigint": [1, 2, None],
+         "bool": [True, False, None],
+         "single": [1.0, NaN, None],
+         "double": [1.0, NaN, None],
+         "str": ["foo", "bar", None],
+         "datetime": [datetime.datetime(2019, 1, 1),
+                      datetime.datetime(2019, 1, 2),
+                      None],
+         "date": [datetime.date(2019, 1, 1),
+                  datetime.date(2019, 1, 2),
+                  None],
+         "map": [{"foo": "bar"}, {"bar": "foo"}, None],
+         "array": [[1, 2, 3], [3, 4, 5], None]}
+    )
+
+    data = list(zip(*values.values()))
+
+    c = types.StructField
+    columns = [c("int", types.IntegerType()),
+               c("smallint", types.ShortType()),
+               c("bigint", types.LongType()),
+               c("bool", types.BooleanType()),
+               c("single", types.FloatType()),
+               c("double", types.DoubleType()),
+               c("str", types.StringType()),
+               c("datetime", types.TimestampType()),
+               c("date", types.DateType()),
+               c("map", types.MapType(types.StringType(), types.StringType())),
+               c("array", types.ArrayType(types.IntegerType()))]
+
+    schema = types.StructType(columns)
+
+    return spark.createDataFrame(data, schema)
+
+
+def test_testdatatable_from_pyspark(spark_test_table):
+    def select(x):
+        from_pyspark = TestDataTable.from_pyspark
+        return from_pyspark(spark_test_table.select(x))
+
+    # int columns
+    int_columns = ["int", "smallint", "bigint"]
+    df = select(int_columns)
+    for int_column in int_columns:
+        assert df[int_column].dtype == "int"
+        assert df[int_column].values == (1, 2, NULL)
+
+    # bool column
+    df = select("bool")
+    assert df["bool"].dtype == "bool"
+    assert df["bool"].values == (True, False, NULL)
+
+    # float columns
+    float_columns = ["single", "double"]
+    df = select(float_columns)
+    for float_column in float_columns:
+        assert df[float_column].dtype == "float"
+        np_assert_equal(df[float_column].values, (1.0, NaN, NULL))
+
+    # string column
+    df = select("str")
+    assert df["str"].dtype == "str"
+    assert df["str"].values == ("foo", "bar", NULL)
+
+    # datetime columns
+    datetime_columns = ["datetime", "date"]
+    df = select(datetime_columns)
+    for datetime_column in datetime_columns:
+        assert df[datetime_column].dtype == "datetime"
+        assert df[datetime_column].values == (datetime.datetime(2019, 1, 1),
+                                              datetime.datetime(2019, 1, 2),
+                                              NULL)
+
+    # unsupported columns
+    unsupported_columns = ["map", "array"]
+    for unsupported_column in unsupported_columns:
+        with pytest.raises(ValueError):
+            df = select(unsupported_column)
