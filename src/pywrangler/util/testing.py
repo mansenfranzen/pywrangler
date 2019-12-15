@@ -64,7 +64,7 @@ class ConverterFromPySpark:
                     "int": "int",
                     "bigint": "int",
                     "boolean": "bool",
-                    "single": "float",
+                    "float": "float",
                     "double": "float",
                     "string": "str",
                     "timestamp": "datetime",
@@ -100,8 +100,9 @@ class ConverterFromPySpark:
         # check unsupported pyspark dtypes
         unsupported = set(pyspark_dtypes).difference(self.TYPE_MAPPING.keys())
         if unsupported:
-            raise ValueError("Unsupported dtype encountered: {}."
-                             .format(unsupported))
+            raise ValueError("Unsupported dtype encountered: {}. Supported"
+                             "dtypes are: {}."
+                             .format(unsupported, self.TYPE_MAPPING.keys()))
 
         dtypes = [self.TYPE_MAPPING[dtype] for dtype in pyspark_dtypes]
 
@@ -738,7 +739,8 @@ class TestDataTable:
 
     The main focus lies on simple but correct data representation. This
     includes explicit values for NULL and NaN. Each column needs to be typed.
-    For simplicity, all values will be represented as plain python types
+    Available types are integer, boolean, string, float and datetime.  For
+    simplicity, all values will be represented as plain python types
     (no 3rd party). Hence, it is not intended to be used for large amounts of
     data due to its representation in plain python objects.
 
