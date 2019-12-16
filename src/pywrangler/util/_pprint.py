@@ -2,10 +2,14 @@
 
 """
 
-import typing
+import re
+import textwrap
+from typing import Any, List, Tuple, Union
 
-ITERABLE = typing.Union[typing.List[str], typing.Tuple[str]]
-ENUM = typing.Union[ITERABLE, dict]
+ITERABLE = Union[List[str], Tuple[str]]
+ENUM = Union[ITERABLE, dict]
+
+REGEX_REMOVE_WHITESPACES = re.compile(r"\s{2,}")
 
 
 def _join(lines: ITERABLE) -> str:
@@ -42,7 +46,7 @@ def _indent(lines: ITERABLE, indent: int = 3) -> list:
 
 
 def header(name: str, indent: int = 0, underline: str = "-") -> str:
-    """Create header with underline.
+    """Create columns with underline.
 
     Parameters
     ----------
@@ -55,7 +59,7 @@ def header(name: str, indent: int = 0, underline: str = "-") -> str:
 
     Returns
     -------
-    header: str
+    columns: str
 
     """
 
@@ -80,8 +84,8 @@ def enumeration(values: ENUM, indent: int = 0, bullet_char: str = "-",
     bullet_char: str, optional
         Bullet character.
     align_values: bool, optional
-        If dict is provided, align all values to the same column. The longest
-        key defines the exact position.
+        If dict is provided, align all identifiers to the same column. The
+        longest key defines the exact position.
     align_width: int, optional
         If dict is provided and `align_values` is True, manually set the align
         width.
@@ -184,11 +188,76 @@ def pretty_time_duration(seconds: float, precision: int = 1, align: str = ">",
              ('µs', 1e-6),
              ('ns', 1e-9)]
 
+    # catch 0 value
+    if seconds == 0:
+        return template.format(time_delta=0,
+                               align=align,
+                               width=width,
+                               precision=0,
+                               unit="s")
+
+    # catch negative value
+    if seconds < 0:
+        sign = -1
+        seconds = abs(seconds)
+    else:
+        sign = 1
+
     for unit_name, unit_seconds in units:
         if seconds > unit_seconds:
             time_delta = seconds / unit_seconds
-            return template.format(time_delta=time_delta,
+            return template.format(time_delta=sign * time_delta,
                                    align=align,
                                    width=width,
                                    precision=precision,
                                    unit=unit_name)
+
+
+def textwrap_docstring(dobject: Any, width: int = 70) -> List[str]:
+    """Extract doc string from object and textwrap it with given width. Remove
+    double whitespaces.
+
+    Parameters
+    ----------
+    dobject: Any
+        Object to extract doc string from.
+    width: int, optional
+        Length of text values to wrap doc string.
+
+    Returns
+    -------
+    Wrapped doc string as list of lines.
+
+    """
+
+    if not dobject.__doc__:
+        return []
+
+    sanitized = REGEX_REMOVE_WHITESPACES.sub(" ", dobject.__doc__).strip()
+    return textwrap.wrap(sanitized, width=width)
+
+
+def truncate(string: str, width: int, ending: str = "...") -> str:
+    """Truncate string to be no longer than provided width. When truncated, add
+    add `ending` to shortened string as indication of truncation.
+
+    Parameters
+    ----------
+    string: str
+        String to be truncated.
+    width: int
+        Maximum amount of characters before truncation.
+    ending: str, optional
+        Indication string of truncation.
+
+    Returns
+    -------
+    Truncated string.
+
+    """
+
+    if not len(string) > width:
+        return string
+
+    length = width - len(ending)
+    return string[:length] + ending

@@ -1,6 +1,9 @@
 """pytest configuration
 
 """
+import multiprocessing
+
+import multiprocessing
 
 import pytest
 
@@ -20,6 +23,13 @@ def spark(request):
 
         # use pyarrow if available for pandas to pyspark communication
         spark.conf.set("pyspark.sql.execution.arrow.enabled", "true")
+
+        # for testing, reduce the number of partitions to the number of cores
+        cpu_count = multiprocessing.cpu_count()
+        spark.conf.set("spark.sql.shuffle.partitions", cpu_count)
+
+        # print pyspark ui url
+        print("\nPySpark UiWebUrl:", spark.sparkContext.uiWebUrl, "\n")
 
         request.addfinalizer(lambda: spark.stop())
         return spark

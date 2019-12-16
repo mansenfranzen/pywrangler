@@ -73,8 +73,14 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         # get boolean series with start and end markers
         marker_col = F.col(self.marker_column)
-        bool_start = (marker_col == self.marker_start).cast("integer")
-        bool_end = (marker_col == self.marker_end).cast("integer")
+        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
+
+        # account for identical start and end markers
+        if self._identical_start_end_markers:
+            ser_id = F.sum(bool_start).over(w_lag)
+            return df.withColumn(self.target_column_name, ser_id)
+
+        bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
         bool_start_end = bool_start + bool_end
 
         # shifting the close marker allows cumulative sum to include the end

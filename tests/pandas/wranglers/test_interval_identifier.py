@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from tests.test_data.interval_identifier import (
@@ -19,8 +20,9 @@ from tests.test_data.interval_identifier import (
     single_interval,
     single_interval_spanning,
     start_marker_left_open,
-    starts_with_single_interval
-)
+    starts_with_single_interval,
+    identical_start_end_with_invalids,
+    identical_start_end_with_invalids_unsorted)
 
 from pywrangler.pandas.wranglers.interval_identifier import (
     NaiveIterator,
@@ -45,7 +47,10 @@ MARKER_TYPES = {"string": {"start": "start",
 
                 "float": {"start": 1.1,
                           "end": 1.2,
-                          "noise": 1.3}}
+                          "noise": 1.3},
+                "nan": {"start": 1,
+                        "end": 2,
+                        "noise": np.NaN}}
 
 MARKERS = MARKER_TYPES.values()
 MARKERS_IDS = list(MARKER_TYPES.keys())
@@ -90,6 +95,13 @@ TEST_CASES_NO_ORDER_GROUP_IDS = [x.__name__ for x in TEST_CASES_NO_ORDER_GROUP]
 TEST_CASES_NO_ORDER_GROUP_KWARGS = dict(argnames='test_case',
                                         argvalues=TEST_CASES_NO_ORDER_GROUP,
                                         ids=TEST_CASES_NO_ORDER_GROUP_IDS)
+
+TEST_CASES_IDENTICAL = (identical_start_end_with_invalids,
+                        identical_start_end_with_invalids_unsorted)
+TEST_CASE_IDENTICAL_IDS = [x.__name__ for x in TEST_CASES_IDENTICAL]
+TEST_CASE_IDENTICAL_KWARGS = dict(argnames='test_case',
+                                  argvalues=TEST_CASES_IDENTICAL,
+                                  ids=TEST_CASE_IDENTICAL_IDS)
 
 GROUPBY_ORDER_TYPES = {'no_order': {'groupby_columns': 'groupby'},
                        'no_groupby': {'order_columns': 'order'},
@@ -159,7 +171,7 @@ def test_groupby_order_columns(test_case, wrangler, marker, shuffle):
                                  **kwargs)
 
     test_output = wrangler_instance.fit_transform(test_input)
-    assert_frame_equal(test_output, expected)
+    assert_frame_equal(test_output, expected, check_dtype=False)
 
 
 @pytest.mark.parametrize(**GROUPBY_ORDER_KWARGS)
@@ -197,4 +209,24 @@ def test_no_groupby_order_columns(test_case, wrangler, groupby_order):
                                  **groupby_order)
 
     test_output = wrangler_instance.fit_transform(test_input)
+
     assert_frame_equal(test_output, expected)
+
+
+@pytest.mark.parametrize(**TEST_CASE_IDENTICAL_KWARGS)
+@pytest.mark.parametrize(**MARKERS_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_identical_start_end_marker(wrangler, marker, test_case):
+    test_input, expected = test_case(
+        start=marker["start"],
+        noise=marker["noise"],
+        target_column_name="iids")
+
+    wrangler_instance = wrangler(marker_column="marker",
+                                 marker_start=marker["start"],
+                                 order_columns="order",
+                                 groupby_columns="groupby")
+
+    test_output = wrangler_instance.fit_transform(test_input)
+
+    assert_frame_equal(test_output, expected, check_dtype=False)
