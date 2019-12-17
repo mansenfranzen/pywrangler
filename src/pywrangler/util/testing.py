@@ -5,7 +5,17 @@ import collections
 import copy
 import numbers
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union
+)
 
 import numpy as np
 import pandas as pd
@@ -760,7 +770,7 @@ class TestDataTable:
     """
 
     def __init__(self,
-                 data: List[List],
+                 data: Union[Dict[str, List], List[List]],
                  columns: List[str],
                  dtypes: List[str]):
 
@@ -894,6 +904,38 @@ class TestDataTable:
 
         return converter()
 
+    @staticmethod
+    def from_dict(data: Dict[str, List]) -> 'TestDataTable':
+        """Converts a python dict into TestDataTable. Assumes keys to be column
+        names with type annotations and values to values.
+
+        """
+
+        pass
+
+    @staticmethod
+    def _parse_type_annotations(typed_columns: List[str]) \
+            -> Tuple[List[str], List[str]]:
+        """Separates column names and corresponding type annotations from
+        column names with type annotation strings.
+
+        For example, ["a:int", "b:str"] will be separated into ("a", "b"),
+        ("int", "str").
+
+        """
+
+        splitted = [x.split(":") for x in typed_columns]
+
+        # assert correct split
+        invalid = [x for x in splitted if len(x) != 2]
+        if invalid:
+            raise ValueError("Invalid typed column format encountered: {}. "
+                             "Typed columns should be formulated like "
+                             "'col_name:type_name', e.g. 'col1:int'. "
+                             .format(invalid))
+
+        cols, types = zip(*splitted)
+
     def __getitem__(self, name: str) -> TestDataColumn:
         """Convenient access to TestDataColumn via column name.
 
@@ -930,6 +972,130 @@ class TestDataTable:
 
         tabulate.MIN_PADDING = preserve
         return _repr
+
+
+class EngineTester:
+
+    def __init__(self, parent):
+        self.parent = parent
+
+    def pandas(self, test_func: Callable, args: Optional[Iterable] = None,
+               kwargs: Optional[Dict[str, Any]] = None,
+               merge_input: Optional[bool] = False):
+        """Assert test data input/output equality for a given test function.
+        Input  data is passed to the test function and the result is compared
+        to output data.
+
+        Some data test cases require the test function to add new columns
+        to the input dataframe where correct row order is mandatory. In
+        those cases, pandas test functions may only return new columns
+        instead of adding columns to the input dataframe (modifying the
+        input dataframe may result in performance penalties and hence
+        should be prevented). This is special to pandas since it provides
+        an index containing the row order information and does not require
+        the input dataframe to be modified. However, data test cases are
+        formulated to include the input dataframe within the output
+        dataframe when row order matters because other engines may not have
+        an explicit index column (e.g. pyspark). To account for this pandas
+        specific behaviour, `merge_input` can be activated to make the
+        assertion behave appropriately.
+
+        Parameters
+        ----------
+        test_func: callable
+            A function that takes a pandas dataframe as the first keyword
+            argument.
+        args: iterable, optional
+            Positional arguments which will be passed to `func`.
+        kwargs: dict, optional
+            Keyword arguments which will be passed to `func`.
+        merge_input: bool, optional
+            Merge input dataframe to the computed result of the test function
+            (inner join on index).
+
+        """
+
+        df_input = self.parent.input().to_pandas()
+        df_result = test_func(df_input, *args, **kwargs)
+
+        if merge_input:
+            if isinstance(df_result, pd.Series):
+                df_result = df_input.assign(**{df_result.name: df_result})
+            else:
+                df_result = pd.merge(df_input, df_result, left_index=True,
+                                     right_index=True, how="inner")
+
+        output = self.parent.ouput()
+        output.assert_equal(TestDataTable.from_pandas(df_result))
+
+    def pyspark(self, test_func: Callable, args: Optional[Iterable] = None,
+                kwargs: Optional[Dict[str, Any]] = None,
+                repartition: Optional[int, List[str]] = None):
+        """Assert test data input/output equality for a given test function.
+        Input  data is passed to the test function and the result is compared
+        to output data.
+
+        Pyspark's partitioning may be explicitly varied to test against
+        different partitioning settings via `repartition`.
+
+        Parameters
+        ----------
+        test_func: callable
+            A function that takes a pandas dataframe as the first keyword
+            argument.
+        args: iterable, optional
+            Positional arguments which will be passed to `func`.
+        kwargs: dict, optional
+            Keyword arguments which will be passed to `func`.
+        repartition: int, list, optional
+            Repartition input dataframe.
+
+        """
+
+        df_input = self.parent.input().to_pyspark()
+
+        if repartition is not None:
+            df_input = df_input.repartition(repartition)
+
+        df_result = test_func(df_input, *args, **kwargs)
+
+        output = self.parent.ouput()
+        output.assert_equal(TestDataTable.from_pyspark(df_result))
+
+
+class MetaBase(type):
+    def __new__(mcl, name, bases, nmspc):
+        print('MetaBase.__new__\n')
+
+        def to_plain_frame(self, *args, **kwargs):
+            print("intercepted")
+            result = nmspc["input"](self, *args, **kwargs)
+            print(result)
+            return result
+
+        newclass = super(MetaBase, mcl).__new__(mcl, name, bases, nmspc)
+        setattr(newclass, "input", to_plain_frame)
+        return newclass
+
+    def __init__(cls, name, bases, nmspc):
+        print('MetaBase.__init__\n')
+        super(MetaBase, cls).__init__(name, bases, nmspc)
+
+
+class DataTestCase(metaclass=MetaBase):
+
+    def __init__(self, engine):
+        self.engine = engine
+        self.test = EngineTester(self)
+
+    def data(self):
+        pass
+
+    def input(self):
+        self.data[""]
+
+    def output(self):
+        pass
 
 
 def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
