@@ -1,6 +1,7 @@
 """This module contains implementations of the interval identifier wrangler.
 
 """
+import sys
 
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
@@ -105,3 +106,61 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # ser_id needs be created temporarily for renumerate_adjusted
         return df.withColumn(self.target_column_name, ser_id) \
             .withColumn(self.target_column_name, renumerate_adjusted)
+
+    def transform_first_start_first_end(self, df: DataFrame) -> DataFrame:
+        """Extract interval ids from given dataframe.
+
+        Parameters
+        ----------
+        df: pyspark.sql.Dataframe
+
+        Returns
+        -------
+        result: pyspark.sql.Dataframe
+            Same columns as original dataframe plus the new interval id column.
+
+        """
+
+        # check input
+        self.validate_input(df)
+
+        # define window specs
+        orderby = util.prepare_orderby(self.order_columns, self.ascending)
+        groupby = self.groupby_columns or []
+
+        w_lag = Window.partitionBy(groupby).orderBy(orderby)
+        w_id = Window.partitionBy(groupby + [self.target_column_name])
+
+        # get boolean series with start and end markers
+        marker_col = F.col(self.marker_column)
+        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
+
+        # TODO: identical start end markers
+
+        bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
+        bool_start_end = bool_start + bool_end
+
+        # ffill marker start
+        ffill = F.when(F.col(self.marker_column) == self.marker_start, 1) \
+            .when(F.col(self.marker_column) == self.marker_end, 0) \
+            .otherwise(None)
+
+        ffill_col = F.last(ffill, ignorenulls=True).over(w_lag.rowsBetween(-sys.maxsize, 0))
+        # shift
+        shift_col = F.lag(ffill_col, default=0, count=1).over(w_lag).cast("integer")
+        # compare ffill and ffill_shift col if equal set to 0
+        end_marker_null_col = F.when(shift_col == ffill_col, 0).otherwise(ffill_col)
+        # negate shift_col
+        shift_col_negated = F.when(shift_col == 0, 1).otherwise(0)
+        # add
+        add_col = end_marker_null_col + shift_col_negated
+        # cumsum
+        ser_id = F.sum(add_col).over(w_lag)
+
+        df = df.withColumn(self.target_column_name, ser_id)
+
+        # separate valid vs invalid: ids with start AND end marker are valid
+        bool_valid = F.sum(bool_start_end).over(w_id) >= 2
+        valid_ids = F.when(bool_valid, ser_id).otherwise(0)
+
+        return df.withColumn(self.target_column_name, valid_ids)
