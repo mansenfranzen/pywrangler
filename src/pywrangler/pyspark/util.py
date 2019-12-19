@@ -52,3 +52,17 @@ def prepare_orderby(order_columns: TYPE_COLUMNS,
     zipped = zip(order_columns, ascending)
     return [column if ascending else F.desc(column)
             for column, ascending in zipped]
+
+
+def prepare_reverse_orderby(order_columns: TYPE_COLUMNS,
+                            ascending: TYPE_ASCENDING) -> TYPE_OPT_COLUMN:
+    """Convenient function to return orderby columns in inverse order.
+
+    """
+
+    if order_columns is None:
+        return []
+
+    zipped = zip(order_columns, ascending)
+    return [column if not ascending else F.desc(column)
+            for column, ascending in zipped]
