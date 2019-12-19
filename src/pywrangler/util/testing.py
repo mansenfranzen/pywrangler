@@ -769,15 +769,52 @@ class TestDataTable:
 
     """
 
+    TYPE_ABBR = {"i": "int",
+                 "b": "bool",
+                 "f": "float",
+                 "s": "str",
+                 "d": "datetime"}
+
     def __init__(self,
-                 data: Union[Dict[str, List], List[List]],
+                 data: List[List],
                  columns: List[str],
-                 dtypes: List[str]):
+                 dtypes: Optional[List[str]] = None):
+        """Initialize `TestDataTable`. Dtypes have to provided either via
+        `columns` as typed column annotations or directly via `dtypes`.
+        Typed column annotations are a convenient way to omit the `dtypes`
+        parameter while specifying dtypes directly with the `columns`
+        parameter.
+
+        An exmaple of a typed column annotation is as follows:
+        >>> columns = ["col_a:int", "col_b:str", "col_c:float"]
+
+        Abbreviations may also be used like:
+        >>> columns = ["col_a:i", "col_b:s", "col_c:f"]
+
+        For a complete abbreviation mapping, please see `TYPE_ABBR`.
+
+        Parameters
+        ----------
+        data: list
+            List of iterables representing the input data.
+        columns: list
+            List of strings representing the column names. Typed annotations
+            are allowed to be used here and will be checked of `dtypes` is not
+            provided.
+        dtypes: list, optional
+            List of column types.
+
+        """
 
         # set attributes
         self.data = data
-        self.columns = columns
-        self.dtypes = dtypes
+
+        # check for typed columns
+        if dtypes is None:
+            self.columns, self.dtypes = self._parse_typed_columns(columns)
+        else:
+            self.columns = columns
+            self.dtypes = dtypes
 
         # validate inputs
         self._validata_inputs()
@@ -786,7 +823,7 @@ class TestDataTable:
         self.n_rows = len(data)
         self.n_cols = len(columns)
 
-        zipped = zip(columns, dtypes, zip(*data))
+        zipped = zip(self.columns, self.dtypes, zip(*self.data))
         _columns = [(column, TestDataColumn(column, dtype, data))
                     for column, dtype, data in zipped]
         self._columns = collections.OrderedDict(_columns)
@@ -907,14 +944,35 @@ class TestDataTable:
     @staticmethod
     def from_dict(data: Dict[str, List]) -> 'TestDataTable':
         """Converts a python dict into TestDataTable. Assumes keys to be column
-        names with type annotations and values to values.
+        names with type annotations and values to be values.
+
+        Parameters
+        ----------
+        data: dict
+            Keys represent typed column annotations and values represent data
+            values.
+
+        Returns
+        -------
+        datatable: TestDataTable
 
         """
 
-        pass
+        columns, values = zip(*data.items())
+        values = list(zip(*values))
 
-    @staticmethod
-    def _parse_type_annotations(typed_columns: List[str]) \
+        return TestDataTable(data=values, columns=columns)
+
+    def to_dict(self) -> Dict[str, list]:
+        """Converts TestDataTable into dictionary with key as typed columns
+        and values as data.
+
+        """
+
+        return {"{}:{}".format(column.name, column.dtype): column.values
+                for column in self._columns.values()}
+
+    def _parse_typed_columns(self, typed_columns: List[str]) \
             -> Tuple[List[str], List[str]]:
         """Separates column names and corresponding type annotations from
         column names with type annotation strings.
@@ -931,10 +989,25 @@ class TestDataTable:
         if invalid:
             raise ValueError("Invalid typed column format encountered: {}. "
                              "Typed columns should be formulated like "
-                             "'col_name:type_name', e.g. 'col1:int'. "
+                             "'col_name:type_name', e.g. 'col1:int'. Please "
+                             "be aware that this error may occur if you omit "
+                             "dtypes when instantiating `TestDataTable`."
                              .format(invalid))
 
+        # get column names and corresponding types
         cols, types = zip(*splitted)
+
+        # complete type abbreviations
+        types = [self.TYPE_ABBR.get(x, x) for x in types]
+
+        # check valid types
+        invalid_types = set(types).difference(self.TYPE_ABBR.values())
+        if invalid_types:
+            raise ValueError("Invalid types encountered: {}. Valid types "
+                             "are: {}."
+                             .format(invalid_types, self.TYPE_ABBR.items()))
+
+        return cols, types
 
     def __getitem__(self, name: str) -> TestDataColumn:
         """Convenient access to TestDataColumn via column name.
