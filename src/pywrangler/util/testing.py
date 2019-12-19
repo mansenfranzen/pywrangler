@@ -1049,6 +1049,14 @@ class TestDataTable:
 
 
 class EngineTester:
+    """Composite of `DataTestCase` which resembles a collection of engine
+    specific assertion functions. More concretely, for each computation engine,
+    the input data from the parent data test case is passed to the function to
+    be tested. The result is then compared to the output data of the parent
+    data test case. Each engine may additionally provide engine specific
+    functionality (like repartition for pyspark).
+
+    """
 
     def __init__(self, parent):
         self.parent = parent
@@ -1104,7 +1112,7 @@ class EngineTester:
 
     def pyspark(self, test_func: Callable, args: Optional[Iterable] = None,
                 kwargs: Optional[Dict[str, Any]] = None,
-                repartition: Optional[int, List[str]] = None):
+                repartition: Optional[Union[int, List[str]]] = None):
         """Assert test data input/output equality for a given test function.
         Input  data is passed to the test function and the result is compared
         to output data.
