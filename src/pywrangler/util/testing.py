@@ -1201,20 +1201,83 @@ class TestDataConverter(type):
                                  "tuple. Provided type is {}."
                                  .format(type(result)))
 
-class DataTestCase(metaclass=MetaBase):
+        return wrapper
+
+
+class DataTestCase(metaclass=TestDataConverter):
+    """Represents a data focused test case which serves the purpose of
+    unification and standardization of test data formulation for data
+    transforming functions. Importantly, the data test case is independent of
+    any computation engine's data representation but allows to test the defined
+    test data for each engine. This is achieved via the `TestDataFrame` which
+    consists of plain python objects and offers conversion methods from and to
+    all supported computation engines.
+
+    Every data test case implements `input` and `output` methods. They resemble
+    the data given to a test function and the computed data expected from the
+    corresponding test function, respectively.
+
+    The data needs to be provided in a computation engine independent format.
+    This is accomplished via the use of the `TestDataTable` class. However,
+    for convenience, it is sufficient to return a dict or a tuple which will
+    be automatically converted to a `TestDataTable`.
+
+    A dict requires typed column names as keys and values as values, like:
+    >>> result = {"col1:int": [1,2,3], "col2:str": ["a", "b", "c"]}
+
+    A tuple may be returned in 2 variants. First, it includes data, column
+    names and dtypes.
+    >>> data = [[1, "a"], [2, "b"], [3, "b"]]
+    >>> columns = ["col1", "col2"]
+    >>> dtypes = ["int", "str"]
+    >>> result = (data, columns, dtypes)
+
+    Second, dtypes may be provided simultaneously with column names as
+    typed column annotations:
+    >>> data = [[1, "a"], [2, "b"], [3, "b"]]
+    >>> columns = ["col1:int", "col2:str"]
+    >>> result = (data, columns)
+
+    In any case, you may also provide `TestDataTable` directly.
+
+    Additionally, there is a `data` method which may hold shared data for
+    `input` and `output` methods. This is meaningful if input and output data
+    are essentially the same except for newly computed column, for example. The
+    result of `data` is also converted to `TestDataTable` automatically.
+
+    """
 
     def __init__(self, engine):
         self.engine = engine
         self.test = EngineTester(self)
 
     def data(self):
-        pass
+        """Represents the shared data for both the `input` and `output`
+        methods.
+
+        """
+
+        raise NotImplementedError
 
     def input(self):
-        self.data[""]
+        """Represents the data input given to a data transformation function
+        to be tested.
+
+        It needs to be implemented by every data test case.
+
+        """
+
+        raise NotImplementedError
 
     def output(self):
-        pass
+        """Represents the data output expected from data transformation
+        function to be tested.
+
+        It needs to be implemented by every data test case.
+
+        """
+
+        raise NotImplementedError
 
 
 def concretize_abstract_wrangler(wrangler_class: Type) -> Type:
