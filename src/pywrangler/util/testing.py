@@ -5,6 +5,7 @@ import collections
 import copy
 import numbers
 from datetime import datetime
+from functools import wraps
 from typing import (
     Any,
     Callable,
@@ -1136,24 +1137,61 @@ class EngineTester:
         output.assert_equal(TestDataTable.from_pyspark(df_result))
 
 
-class MetaBase(type):
+class TestDataConverter(type):
     def __new__(mcl, name, bases, nmspc):
-        print('MetaBase.__new__\n')
+        mandatory = ("input", "output")
+        optional = "data"
 
-        def to_plain_frame(self, *args, **kwargs):
-            print("intercepted")
-            result = nmspc["input"](self, *args, **kwargs)
-            print(result)
-            return result
+        for mand in mandatory:
+            if mand not in nmspc:
+                raise NotImplementedError("DataTestCase '{}' needs to "
+                                          "implement '{}' method."
+                                          .format(name, mand))
 
-        newclass = super(MetaBase, mcl).__new__(mcl, name, bases, nmspc)
-        setattr(newclass, "input", to_plain_frame)
+        present = list(mandatory)
+        if optional in nmspc:
+            present.append(optional)
+
+        wrapped = {key: TestDataConverter.ensure_format(nmspc[key])
+                   for key in present}
+
+        newclass = super(TestDataConverter, mcl).__new__(mcl, name, bases,
+                                                         nmspc)
+        for key, func in wrapped.items():
+            setattr(newclass, key, func)
+
         return newclass
 
     def __init__(cls, name, bases, nmspc):
-        print('MetaBase.__init__\n')
-        super(MetaBase, cls).__init__(name, bases, nmspc)
+        super(TestDataConverter, cls).__init__(name, bases, nmspc)
 
+    @staticmethod
+    def ensure_format(data_func):
+        """Helper function to ensure provided data input is correctly converted
+        to `TestDataTable`.
+
+        Checks following scenarios: If TestDataTable is given, simply pass. If
+        dict is given, call constructor from dict. If tuple is given, pass to
+        normal init of TestDataTable.
+
+        """
+        print("Wrapping")
+
+        @wraps(data_func)
+        def wrapper(self, *args, **kwargs):
+            print(args, kwargs)
+            result = data_func(self, *args, **kwargs)
+            if isinstance(result, TestDataTable):
+                return result
+            elif isinstance(result, dict):
+                return TestDataTable.from_dict(result)
+            elif isinstance(result, tuple):
+                return TestDataTable(*result)
+            else:
+                raise ValueError("Unsupported data encountered. Data needs "
+                                 "needs to be TestDataFrame, a dict or a "
+                                 "tuple. Provided type is {}."
+                                 .format(type(result)))
 
 class DataTestCase(metaclass=MetaBase):
 
