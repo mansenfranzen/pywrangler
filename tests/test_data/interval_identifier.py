@@ -773,3 +773,98 @@ IdenticalStartEndTests = TestCollection([
     IdenticalStartEndMultipleIntervalMissingUnsorted,
     IdenticalStartEndMultipleOrderGroupbyMissing
 ])
+
+
+def first_start_first_end_end_begins(start, end, noise, target_column_name):
+    # cols:  order1, groupby1, marker, iid"""
+    data = [[1,      1,        end,     0],
+            [2,      1,        noise,   0],
+            [3,      1,        start,   4],
+            [4,      1,        noise,   4],
+            [5,      1,        noise,   4],
+            [6,      1,        noise,   4],
+            [7,      1,        end,     4],
+            [8,      1,        end,     0],
+            [9,      1,        start,   7],
+            [10,     1,        start,   7],
+            [11,     1,        start,   7],
+            [12,     1,        noise,   7],
+            [13,     1,        end,     7],
+            [14,     1,        start,   9],
+            [15,     1,        noise,   9],
+            [16,     1,        end,     9],
+            [17,     1,        end,     0],
+            [18,     1,        end,     0]]
+
+    return _return_dfs(data, target_column_name)
+
+def first_start_first_end_start_begins(start, end, noise, target_column_name):
+    # cols:  order1, groupby1, marker, iid"""
+    data = [[1,      1,        start,   2],
+            [2,      1,        noise,   2],
+            [3,      1,        start,   2],
+            [4,      1,        noise,   2],
+            [5,      1,        noise,   2],
+            [6,      1,        noise,   2],
+            [7,      1,        end,     2],
+            [8,      1,        end,     0],
+            [9,      1,        start,   5],
+            [10,     1,        start,   5],
+            [11,     1,        start,   5],
+            [12,     1,        noise,   5],
+            [13,     1,        end,     5],
+            [14,     1,        start,   7],
+            [15,     1,        noise,   7],
+            [16,     1,        end,     7],
+            [17,     1,        end,     0],
+            [18,     1,        end,     0]]
+
+    return _return_dfs(data, target_column_name)
+
+def first_start_first_end_multiple_groupby(start, end, noise, target_column_name):
+    # cols:  order1, groupby1, marker, iid"""
+    data = [[1,      1,        start,   2],
+            [2,      1,        noise,   2],
+            [3,      1,        start,   2],
+            [4,      1,        noise,   2],
+            [5,      1,        end,     2],
+            [6,      1,        noise,   0],
+            [7,      1,        start,   5],
+            [8,      1,        end,     5],
+            [9,      1,        start,   7],
+            [1,      2,        start,   7],
+            [2,      2,        start,   7],
+            [3,      2,        noise,   7],
+            [4,      2,        end,     7],
+            [5,      2,        start,   9],
+            [6,      2,        noise,   9],
+            [7,      2,        end,     9],
+            [8,      2,        end,     0],
+            [9,      2,        end,     0],
+            [10,     2,        start,   0]]
+
+    return _return_dfs(data, target_column_name)
+
+def first_start_first_end_multiple_groupby_unsorted(start, end, noise, target_column_name):
+    # cols:  order1, groupby1, marker, iid"""
+    data = [[1,      1,        start,   2],
+            [2,      1,        noise,   2],
+            [8,      2,        end,     2],
+            [9,      2,        end,     2],
+            [3,      1,        start,   2],
+            [4,      1,        noise,   0],
+            [1,      2,        start,   5],
+            [2,      2,        start,   5],
+            [3,      2,        noise,   7],
+            [4,      2,        end,     7],
+            [5,      2,        start,   7],
+            [6,      1,        noise,   7],
+            [8,      1,        end,     7],
+            [9,      1,        start,   9],
+            [7,      1,        start,   9],
+            [6,      2,        noise,   9],
+            [7,      2,        end,     0],
+            [5,      1,        end,     0],
+            [10,     2,        start,   0]]
+
+    return _return_dfs(data, target_column_name)

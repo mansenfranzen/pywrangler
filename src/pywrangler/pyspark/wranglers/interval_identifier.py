@@ -135,14 +135,17 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         marker_col = F.col(self.marker_column)
         bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
 
-        # TODO: identical start end markers
+        # account for identical start and end markers
+        if self._identical_start_end_markers:
+            ser_id = F.sum(bool_start).over(w_lag)
+            return df.withColumn(self.target_column_name, ser_id)
 
         bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
         bool_start_end = bool_start + bool_end
 
         # ffill marker start
-        ffill = F.when(F.col(self.marker_column) == self.marker_start, 1) \
-            .when(F.col(self.marker_column) == self.marker_end, 0) \
+        ffill = F.when(marker_col == self.marker_start, 1)\
+            .when(marker_col == self.marker_end, 0)\
             .otherwise(None)
 
         ffill_col = F.last(ffill, ignorenulls=True).over(w_lag.rowsBetween(-sys.maxsize, 0))
@@ -156,7 +159,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         add_col = end_marker_null_col + shift_col_negated
         # cumsum
         ser_id = F.sum(add_col).over(w_lag)
-
         df = df.withColumn(self.target_column_name, ser_id)
 
         # separate valid vs invalid: ids with start AND end marker are valid
