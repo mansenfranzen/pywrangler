@@ -186,10 +186,11 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         self.validate_input(df)
 
         # define window specs
-        orderby = util.prepare_reverse_orderby(self.order_columns, self.ascending)
+        orderby_reverse = util.prepare_reverse_orderby(self.order_columns, self.ascending)
+        orderby = util.prepare_orderby(self.order_columns, self.ascending)
         groupby = self.groupby_columns or []
 
-        w_lag = Window.partitionBy(groupby).orderBy(orderby)
+        w_lag = Window.partitionBy(groupby).orderBy(orderby_reverse)
         w_id = Window.partitionBy(groupby + [self.target_column_name])
 
         # get boolean series with start and end markers
@@ -204,9 +205,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
         bool_start_end = bool_start + bool_end
 
-        df = df.withColumn("marker_start", bool_start)
-        df = df.withColumn("marker_end", bool_end)
-
         # ffill marker start
         ffill = F.when(marker_col == self.marker_end, 1) \
             .when(marker_col == self.marker_start, 0) \
@@ -216,17 +214,18 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # shift, default = 1
         shift_col = F.lag(ffill_col, default=1, count=1).over(w_lag).cast("integer")
         # compare ffill and ffill_shift col if equal set to 0
-        df = df.withColumn("ffill_shift", shift_col)
         end_marker_null_col = F.when(shift_col == ffill_col, 0).otherwise(ffill_col)
         # negate shift_col
         shift_col_negated = F.when(shift_col == 0, 1).otherwise(0)
-        df = df.withColumn("L", end_marker_null_col)
-        df = df.withColumn("M", shift_col_negated)
         # add
         add_col = end_marker_null_col + shift_col_negated
         # cumsum
         ser_id = F.sum(add_col).over(w_lag)
         ser_id = ser_id + 1
-        # df = df.withColumn(self.target_column_name, ser_id)
+        df = df.withColumn(self.target_column_name, ser_id)
 
-        return df.withColumn(self.target_column_name, ser_id)
+        # separate valid vs invalid: ids with start AND end marker are valid
+        bool_valid = F.sum(bool_start_end).over(w_id) >= 2
+        valid_ids = F.when(bool_valid, ser_id).otherwise(0)
+
+        return df.withColumn(self.target_column_name, valid_ids).orderBy(orderby)
