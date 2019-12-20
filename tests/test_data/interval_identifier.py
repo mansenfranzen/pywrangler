@@ -775,6 +775,7 @@ IdenticalStartEndTests = TestCollection([
 ])
 
 
+
 def first_start_first_end_end_begins(start, end, noise, target_column_name):
     # cols:  order1, groupby1, marker, iid"""
     data = [[1,      1,        end,     0],
@@ -798,6 +799,7 @@ def first_start_first_end_end_begins(start, end, noise, target_column_name):
 
     return _return_dfs(data, target_column_name)
 
+
 def first_start_first_end_start_begins(start, end, noise, target_column_name):
     # cols:  order1, groupby1, marker, iid"""
     data = [[1,      1,        start,   2],
@@ -820,6 +822,7 @@ def first_start_first_end_start_begins(start, end, noise, target_column_name):
             [18,     1,        end,     0]]
 
     return _return_dfs(data, target_column_name)
+
 
 def first_start_first_end_multiple_groupby(start, end, noise, target_column_name):
     # cols:  order1, groupby1, marker, iid"""
@@ -845,6 +848,7 @@ def first_start_first_end_multiple_groupby(start, end, noise, target_column_name
 
     return _return_dfs(data, target_column_name)
 
+
 def first_start_first_end_multiple_groupby_unsorted(start, end, noise, target_column_name):
     # cols:  order1, groupby1, marker, iid"""
     data = [[1,      1,        start,   2],
@@ -869,6 +873,7 @@ def first_start_first_end_multiple_groupby_unsorted(start, end, noise, target_co
 
     return _return_dfs(data, target_column_name)
 
+
 def last_start_last_end_end_begins(start, end, noise, target_column_name):
     # cols:  order1, groupby1, marker, iid"""
     data = [[1,      1,        end,     0],
@@ -891,6 +896,7 @@ def last_start_last_end_end_begins(start, end, noise, target_column_name):
             [18,     1,        end,     1]]
 
     return _return_dfs(data, target_column_name)
+
 
 def last_start_last_end_start_begins(start, end, noise, target_column_name):
     # cols:  order1, groupby1, marker, iid"""
