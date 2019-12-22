@@ -347,41 +347,41 @@ def test_testdatatable_from_pandas(pd_convert_dataframe):
     df_conv = TestDataTable.from_pandas(df)
 
     # check int to int
-    assert df_conv["int"].dtype == "int"
-    assert df_conv["int"].values == (1, 2)
+    assert df_conv.get_column("int").dtype == "int"
+    assert df_conv.get_column("int").values == (1, 2)
 
     # check bool to bool
-    assert df_conv["bool"].dtype == "bool"
-    assert df_conv["bool"].values == (True, False)
+    assert df_conv.get_column("bool").dtype == "bool"
+    assert df_conv.get_column("bool").values == (True, False)
 
     # check bool (object) to bool with nan
-    assert df_conv["bool_na"].dtype == "bool"
-    assert df_conv["bool_na"].values == (True, NULL)
+    assert df_conv.get_column("bool_na").dtype == "bool"
+    assert df_conv.get_column("bool_na").values == (True, NULL)
 
     # check float to float
-    assert df_conv["float"].dtype == "float"
-    assert df_conv["float"].values == (1.2, 1.3)
+    assert df_conv.get_column("float").dtype == "float"
+    assert df_conv.get_column("float").values == (1.2, 1.3)
 
     # check float to float with nan
-    assert df_conv["float_na"].dtype == "float"
-    np_assert_equal(df_conv["float_na"].values, (1.2, NaN))
+    assert df_conv.get_column("float_na").dtype == "float"
+    np_assert_equal(df_conv.get_column("float_na").values, (1.2, NaN))
 
     # check str to str
-    assert df_conv["str"].dtype == "str"
-    assert df_conv["str"].values == ("foo", "bar")
+    assert df_conv.get_column("str").dtype == "str"
+    assert df_conv.get_column("str").values == ("foo", "bar")
 
     # check str to str with nan
-    assert df_conv["str_na"].dtype == "str"
-    assert df_conv["str_na"].values == ("foo", NULL)
+    assert df_conv.get_column("str_na").dtype == "str"
+    assert df_conv.get_column("str_na").values == ("foo", NULL)
 
     # check datetime to datetime
-    assert df_conv["datetime"].dtype == "datetime"
-    assert df_conv["datetime"].values == (datetime.datetime(2019, 1, 1),
-                                          datetime.datetime(2019, 1, 2))
+    assert df_conv.get_column("datetime").dtype == "datetime"
+    assert df_conv.get_column("datetime").values == \
+           (datetime.datetime(2019, 1, 1), datetime.datetime(2019, 1, 2))
     # check datetime to datetime with nan
-    assert df_conv["datetime_na"].dtype == "datetime"
-    assert df_conv["datetime_na"].values == (datetime.datetime(2019, 1, 1),
-                                             NULL)
+    assert df_conv.get_column("datetime_na").dtype == "datetime"
+    assert df_conv.get_column("datetime_na").values == (
+        datetime.datetime(2019, 1, 1), NULL)
 
 
 def test_testdatatable_from_pandas_special():
@@ -413,27 +413,27 @@ def test_testdatatable_from_pandas_special():
     # check int to forced int with nan
     df = pd.DataFrame({"int": [1, np.NaN]})
     df_conv = TestDataTable.from_pandas(df, dtypes=["int"])
-    assert df_conv["int"].dtype == "int"
-    assert df_conv["int"].values == (1, NULL)
+    assert df_conv.get_column("int").dtype == "int"
+    assert df_conv.get_column("int").values == (1, NULL)
 
     # check force int to float
     df = pd.DataFrame({"int": [1, 2]})
     df_conv = TestDataTable.from_pandas(df, dtypes=["float"])
-    assert df_conv["int"].dtype == "float"
-    assert df_conv["int"].values == (1.0, 2.0)
+    assert df_conv.get_column("int").dtype == "float"
+    assert df_conv.get_column("int").values == (1.0, 2.0)
 
     # check force float to int
     df = pd.DataFrame({"float": [1.0, 2.0]})
     df_conv = TestDataTable.from_pandas(df, dtypes=["int"])
-    assert df_conv["float"].dtype == "int"
-    assert df_conv["float"].values == (1, 2)
+    assert df_conv.get_column("float").dtype == "int"
+    assert df_conv.get_column("float").values == (1, 2)
 
     # check force str to datetime
     df = pd.DataFrame({"datetime": ["2019-01-01", "2019-01-02"]})
     df_conv = TestDataTable.from_pandas(df, dtypes=["datetime"])
-    assert df_conv["datetime"].dtype == "datetime"
-    assert df_conv["datetime"].values == (datetime.datetime(2019, 1, 1),
-                                          datetime.datetime(2019, 1, 2))
+    assert df_conv.get_column("datetime").dtype == "datetime"
+    assert df_conv.get_column("datetime").values == \
+           (datetime.datetime(2019, 1, 1), datetime.datetime(2019, 1, 2))
 
 
 @pytest.fixture
@@ -487,34 +487,35 @@ def test_testdatatable_from_pyspark(spark_test_table):
     int_columns = ["int", "smallint", "bigint"]
     df = select(int_columns)
     for int_column in int_columns:
-        assert df[int_column].dtype == "int"
-        assert df[int_column].values == (1, 2, NULL)
+        assert df.get_column(int_column).dtype == "int"
+        assert df.get_column(int_column).values == (1, 2, NULL)
 
     # bool column
     df = select("bool")
-    assert df["bool"].dtype == "bool"
-    assert df["bool"].values == (True, False, NULL)
+    assert df.get_column("bool").dtype == "bool"
+    assert df.get_column("bool").values == (True, False, NULL)
 
     # float columns
     float_columns = ["single", "double"]
     df = select(float_columns)
     for float_column in float_columns:
-        assert df[float_column].dtype == "float"
-        np_assert_equal(df[float_column].values, (1.0, NaN, NULL))
+        assert df.get_column(float_column).dtype == "float"
+        np_assert_equal(df.get_column(float_column).values, (1.0, NaN, NULL))
 
     # string column
     df = select("str")
-    assert df["str"].dtype == "str"
-    assert df["str"].values == ("foo", "bar", NULL)
+    assert df.get_column("str").dtype == "str"
+    assert df.get_column("str").values == ("foo", "bar", NULL)
 
     # datetime columns
     datetime_columns = ["datetime", "date"]
     df = select(datetime_columns)
     for datetime_column in datetime_columns:
-        assert df[datetime_column].dtype == "datetime"
-        assert df[datetime_column].values == (datetime.datetime(2019, 1, 1),
-                                              datetime.datetime(2019, 1, 2),
-                                              NULL)
+        col = df.get_column(datetime_column)
+        assert col.dtype == "datetime"
+        assert col.values == (datetime.datetime(2019, 1, 1),
+                              datetime.datetime(2019, 1, 2),
+                              NULL)
 
     # unsupported columns
     unsupported_columns = ["map", "array"]

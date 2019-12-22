@@ -1010,7 +1010,7 @@ class TestDataTable:
 
         return cols, types
 
-    def __getitem__(self, name: str) -> TestDataColumn:
+    def get_column(self, name: str) -> TestDataColumn:
         """Convenient access to TestDataColumn via column name.
 
         Parameters
@@ -1024,7 +1024,45 @@ class TestDataTable:
 
         """
 
-        return self._columns[name]
+        return self._col_dict[name]
+
+    def __getitem__(self, columns: Union[str, Sequence[str], slice]) \
+            -> 'TestDataTable':
+        """Get labeled based subset of TestDataTable. Supports single columns,
+        list and slices of columns.
+
+        Parameters
+        ----------
+        columns: str, list, slice
+            Defines column subset to be returned. If single str is passed,
+            returns single column. If list of strings is passed, returns
+            corresponding columns. If slice is passed, returns all columns
+            included within slice (start and end including).
+
+        Returns
+        -------
+        table: TestDataTable
+
+        """
+
+        if isinstance(columns, str):
+            subset = [columns]
+        elif isinstance(columns, (list, tuple)):
+            subset = columns
+        elif isinstance(columns, slice):
+            start = columns.start
+            stop = columns.stop
+
+            idx_start = self.columns.index(start)
+            idx_stop = self.columns.index(stop)
+
+            subset = self.columns[idx_start:idx_stop+1]
+        else:
+            raise ValueError("Subsetting requires str, list, tuple or slice. "
+                             "However, {} was encountered."
+                             .format(type(columns)))
+
+        return self.from_dict(self.to_dict(subset=subset))
 
     def __repr__(self):
         """Represent table as ASCII representation.
