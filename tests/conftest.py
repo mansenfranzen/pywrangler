@@ -30,7 +30,7 @@ def spark(request):
         # print pyspark ui url
         print("\nPySpark UiWebUrl:", spark.sparkContext.uiWebUrl, "\n")
 
-        request.addfinalizer(lambda: spark.stop())
+        request.addfinalizer(spark.stop)
         return spark
 
     except ImportError:
