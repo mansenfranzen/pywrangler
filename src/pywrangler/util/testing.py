@@ -1345,7 +1345,6 @@ class EngineTester:
 class TestDataConverter(type):
     def __new__(mcl, name, bases, nmspc):
         mandatory = ("input", "output")
-        optional = "data"
 
         for mand in mandatory:
             if mand not in nmspc:
@@ -1353,17 +1352,13 @@ class TestDataConverter(type):
                                           "implement '{}' method."
                                           .format(name, mand))
 
-        present = list(mandatory)
-        if optional in nmspc:
-            present.append(optional)
-
         wrapped = {key: TestDataConverter.ensure_format(nmspc[key])
-                   for key in present}
+                   for key in mandatory}
 
         newclass = super(TestDataConverter, mcl).__new__(mcl, name, bases,
                                                          nmspc)
         for key, func in wrapped.items():
-            setattr(newclass, key, func)
+            setattr(newclass, key, property(func))
 
         return newclass
 
@@ -1394,7 +1389,7 @@ class TestDataConverter(type):
                 return TestDataTable(*result)
             else:
                 raise ValueError("Unsupported data encountered. Data needs "
-                                 "needs to be TestDataFrame, a dict or a "
+                                 "needs to be a TestDataFrame, a dict or a "
                                  "tuple. Provided type is {}."
                                  .format(type(result)))
 
@@ -1402,29 +1397,41 @@ class TestDataConverter(type):
 
 
 class DataTestCase(metaclass=TestDataConverter):
-    """Represents a data focused test case which serves the purpose of
-    unification and standardization of test data formulation for data
-    transforming functions. Importantly, the data test case is independent of
-    any computation engine's data representation but allows to test the defined
-    test data for each engine. This is achieved via the `TestDataFrame` which
-    consists of plain python objects and offers conversion methods from and to
-    all supported computation engines.
+    """Represents a data focused test case which has 3 major goals. First, it
+    aims to unify and standardize test data formulation across different
+    computation engines. Second, test data should be as readable as possible
+    and should be maintainable in pure python. Third, it intends to make
+    writing data centric tests as easy as possible while reducing the need of
+    test case related boilerplate code.
+
+    To accomplish these goals, (1) it provides an abstraction layer for a
+    computation engine independent data representation via `PlainFrame`. Test
+    data is formulated once and automatically converted into the target
+    computation engine representation. To ensure readability (2), test data may
+    be formulated in column or row format with pure python objects. To reduce
+    boilerplate code (3), it provides automatic assertion test functionality
+    for all  computation engines via `EngineAsserter`. Additionally, it allows
+    to define mutants of the input data which should cause the test to fail
+    (hence covering multiple distinct but similar test data scenarios within
+    the same data test case).
 
     Every data test case implements `input` and `output` methods. They resemble
     the data given to a test function and the computed data expected from the
-    corresponding test function, respectively.
+    corresponding test function, respectively. Since the data needs to be
+    formulated in a computation engine independent format, the `PlainFrame` is
+    is used. For convenience, there are multiple ways of instantiation of a
+    `PlainFrame` as a dict or tuple.
 
-    The data needs to be provided in a computation engine independent format.
-    This is accomplished via the use of the `TestDataTable` class. However,
-    for convenience, it is sufficient to return a dict or a tuple which will
-    be automatically converted to a `TestDataTable`.
-
-    A dict requires typed column names as keys and values as values, like:
+    A dict requires typed column names as keys and values as values, which
+    resembles the column format (define values column wise):
     >>> result = {"col1:int": [1,2,3], "col2:str": ["a", "b", "c"]}
 
-    A tuple may be returned in 2 variants. First, it includes data, column
+    A tuple may be returned in 2 variants. Both represent the row format
+    (define values row wise). The most verbose way is to include data, column
     names and dtypes.
-    >>> data = [[1, "a"], [2, "b"], [3, "b"]]
+    >>> data = [[1, "a"],
+    >>>         [2, "b"],
+    >>>         [3, "b"]]
     >>> columns = ["col1", "col2"]
     >>> dtypes = ["int", "str"]
     >>> result = (data, columns, dtypes)
@@ -1437,24 +1444,11 @@ class DataTestCase(metaclass=TestDataConverter):
 
     In any case, you may also provide `TestDataTable` directly.
 
-    Additionally, there is a `data` method which may hold shared data for
-    `input` and `output` methods. This is meaningful if input and output data
-    are essentially the same except for newly computed column, for example. The
-    result of `data` is also converted to `TestDataTable` automatically.
-
     """
 
     def __init__(self, engine):
         self.engine = engine
         self.test = EngineTester(self)
-
-    def data(self):
-        """Represents the shared data for both the `input` and `output`
-        methods.
-
-        """
-
-        raise NotImplementedError
 
     def input(self):
         """Represents the data input given to a data transformation function
