@@ -720,8 +720,8 @@ class EqualityAsserter:
             order_right = self._get_row_order(other)
 
         for column in self.parent.columns:
-            left = self.parent._columns[column].values
-            right = other._columns[column].values
+            left = self.parent._col_dict[column].values
+            right = other._col_dict[column].values
 
             if not assert_row_order:
                 left = [left[idx] for idx in order_left]
@@ -785,10 +785,10 @@ class EqualityAsserter:
         """
 
         left_dtypes = {name: column.dtype
-                       for name, column in self.parent._columns.items()}
+                       for name, column in self.parent._col_dict.items()}
 
         right_dtypes = {name: column.dtype
-                        for name, column in other._columns.items()}
+                        for name, column in other._col_dict.items()}
 
         if left_dtypes != right_dtypes:
             msg = "Mismatching types: "
@@ -896,7 +896,7 @@ class TestDataTable:
         zipped = zip(self.columns, self.dtypes, zip(*self.data))
         _columns = [(column, TestDataColumn(column, dtype, data))
                     for column, dtype, data in zipped]
-        self._columns = collections.OrderedDict(_columns)
+        self._col_dict = collections.OrderedDict(_columns)
 
         self.assert_equal = EqualityAsserter(self)
 
@@ -906,7 +906,7 @@ class TestDataTable:
         """
 
         data = {name: column.to_pandas()
-                for name, column in self._columns.items()}
+                for name, column in self._col_dict.items()}
 
         return pd.DataFrame(data)
 
@@ -918,7 +918,7 @@ class TestDataTable:
         from pyspark.sql import SparkSession
         from pyspark.sql import types
 
-        converted = [column.to_pyspark() for column in self._columns.values()]
+        converted = [column.to_pyspark() for column in self._col_dict.values()]
         fields, values = zip(*converted)
 
         data = list(zip(*values))
@@ -1039,8 +1039,8 @@ class TestDataTable:
 
         """
 
-        return {"{}:{}".format(column.name, column.dtype): column.values
-                for column in self._columns.values()}
+        columns = [("{}:{}".format(column.name, column.dtype), column.values)
+                   for column in self._col_dict.values()]
 
     def _parse_typed_columns(self, typed_columns: List[str]) \
             -> Tuple[List[str], List[str]]:
