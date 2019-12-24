@@ -1223,6 +1223,35 @@ class EngineTester:
     def __init__(self, parent: 'DataTestCase'):
         self.parent = parent
 
+    def __call__(self, test_func: Callable, args: Optional[Iterable] = None,
+                 kwargs: Optional[Dict[str, Any]] = None, **test_kwargs):
+        """Assert test data input/output equality for a given test function.
+        Input  data is passed to the test function and the result is compared
+        to output data. Chooses computation engine as specified by parent.
+
+                Parameters
+        ----------
+        test_func: callable
+            A function that takes a pandas dataframe as the first keyword
+            argument.
+        args: iterable, optional
+            Positional arguments which will be passed to `func`.
+        kwargs: dict, optional
+            Keyword arguments which will be passed to `func`.
+        test_kwargs: dict, optional
+            Any computation specific keyword arguments (like `repartition` for
+            pyspark).
+
+        """
+
+        engine = {"pandas": self.pandas,
+                  "pyspark": self.pyspark}
+
+        engine[self.parent.engine](test_func,
+                                   args=args,
+                                   kwargs=kwargs,
+                                   **test_kwargs)
+
     def pandas(self, test_func: Callable, args: Optional[Iterable] = None,
                kwargs: Optional[Dict[str, Any]] = None,
                merge_input: Optional[bool] = False):
@@ -1259,7 +1288,10 @@ class EngineTester:
 
         """
 
-        df_input = self.parent.input().to_pandas()
+        args = args or ()
+        kwargs = kwargs or {}
+
+        df_input = self.parent.input.to_pandas()
         df_result = test_func(df_input, *args, **kwargs)
 
         if merge_input:
@@ -1296,14 +1328,17 @@ class EngineTester:
 
         """
 
-        df_input = self.parent.input().to_pyspark()
+        args = args or ()
+        kwargs = kwargs or {}
+
+        df_input = self.parent.input.to_pyspark()
 
         if repartition is not None:
             df_input = df_input.repartition(repartition)
 
         df_result = test_func(df_input, *args, **kwargs)
 
-        output = self.parent.ouput()
+        output = self.parent.output
         output.assert_equal(TestDataTable.from_pyspark(df_result))
 
 
