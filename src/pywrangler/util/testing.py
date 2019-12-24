@@ -15,7 +15,8 @@ from typing import (
     Optional,
     Tuple,
     Type,
-    Union
+    Union,
+    Sequence
 )
 
 import numpy as np
@@ -64,6 +65,51 @@ PRIMITIVE_TYPES = {"bool": (bool, NullValue),
                    "float": (float, int, NullValue),
                    "str": (str, NullValue),
                    "datetime": (datetime, NullValue)}
+
+TYPE_ABBR = {"i": "int",
+             "b": "bool",
+             "f": "float",
+             "s": "str",
+             "d": "datetime"}
+
+
+class Mutation:
+    """Resembles a single mutation of a dataframe.
+
+    """
+
+    def __init__(self, column: str, row: int, value: Any):
+        self.column = column
+        self.row = row
+        self.value = value
+
+
+class BaseMutant:
+    """Base class for all mutants. A mutant produces one or more mutations.
+
+    """
+
+    @property
+    def mutations(self) -> List[Mutation]:
+        """Returns all mutations produced by a mutant. Needs to be implemented
+        by every Mutant.
+
+        """
+
+        raise NotImplementedError
+
+
+class ValueMutant(BaseMutant):
+
+    def __init__(self, column: str, row: int, value):
+        self.column = column
+        self.row = row
+        self.value = value
+
+    @property
+    def mutations(self) -> List[Mutation]:
+        mutation = Mutation(column=self.column, row=self.row, value=self.value)
+        return [mutation]
 
 
 class ConverterFromPySpark:
@@ -559,14 +605,13 @@ class TestDataColumn:
         elif dtype == "datetime":
             values = self._preprocess_datetime(values)
 
+        # sanity check for dtypes
+        self._check_dtype(values)
         self.values = values
 
         # get null/nan flags
         self.has_null = any([x is NULL for x in values])
         self.has_nan = any([x is np.NaN for x in values])
-
-        # sanity check for dtypes
-        self._check_dtype()
 
         # add composite converters
         self.to_pandas = ConverterToPandas(self)
@@ -599,18 +644,42 @@ class TestDataColumn:
 
         return tuple(processed)
 
-    def _check_dtype(self):
+    def _check_dtype(self, values):
         """Ensures correct type of all values. Raises TypeError.
 
         """
 
         allowed_types = PRIMITIVE_TYPES[self.dtype]
 
-        for value in self.values:
+        for value in values:
             if not isinstance(value, allowed_types):
-                raise TypeError("Value '{}' has invalid type '{}'. Allowed "
-                                "types are: {}"
-                                .format(value, type(value), allowed_types))
+                raise TypeError("Column '{}' has invalud value '{}' with "
+                                "invalid type '{}'. Allowed types are: {}."
+                                .format(self.name,
+                                        value,
+                                        type(value),
+                                        allowed_types))
+
+    def mutate(self, modifications: Optional[Dict[int, Any]] = None) \
+            -> 'TestDataColumn':
+
+        modifications = modifications or {}
+
+        # check invalid row indices
+        row_idx_provided = set(modifications.keys())
+        row_idx_allowed = range(len(self.values))
+        invalid = row_idx_provided.difference(row_idx_allowed)
+        if invalid:
+            raise ValueError("Invalid row identifier encountered: {}. Valid"
+                             "row identifier are: {}."
+                             .format(invalid, list(row_idx_allowed)))
+
+        modified = [modifications.get(idx, default)
+                    for idx, default in enumerate(self.values)]
+
+        return TestDataColumn(name=self.name,
+                              dtype=self.dtype,
+                              values=tuple(modified))
 
 
 class EqualityAsserter:
@@ -1009,6 +1078,34 @@ class TestDataTable:
                              .format(invalid_types, self.TYPE_ABBR.items()))
 
         return cols, types
+
+    def mutate(self, mutants: Sequence[BaseMutant]) -> 'TestDataTable':
+        """Mutates data and returns new TestDataTable.
+
+        """
+
+        import itertools
+        modifications = {}
+
+        mutations = [mutant.mutations for mutant in mutants]
+        mutations = itertools.chain.from_iterable(mutations)
+        mutations = sorted(mutations, key=lambda x: x.column)
+        grouped = itertools.groupby(mutations, key=lambda x: x.column)
+        for column, column_mutations in grouped:
+            if column not in self.columns:
+                raise ValueError("Invalid mutations with non existent "
+                                 "column name '{}' encountered."
+                                 .format(column))
+            mods = {x.row: x.value for x in column_mutations}
+            modifications[column] = self.get_column(column).mutate(mods)
+
+        new_columns = [modifications.get(column, self.get_column(column))
+                       for column in self.columns]
+
+        new_columns = {"{}:{}".format(column.name, column.dtype): column.values
+                       for column in new_columns}
+
+        return self.from_dict(new_columns)
 
     def get_column(self, name: str) -> TestDataColumn:
         """Convenient access to TestDataColumn via column name.
