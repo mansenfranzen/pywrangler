@@ -1131,7 +1131,7 @@ class TestDataTable:
 
         return self._col_dict[name]
 
-    def __getitem__(self, columns: Union[str, Sequence[str], slice]) \
+    def __getitem__(self, subset: Union[str, Sequence[str], slice]) \
             -> 'TestDataTable':
         """Get labeled based subset of TestDataTable. Supports single columns,
         list and slices of columns.
@@ -1150,24 +1150,43 @@ class TestDataTable:
 
         """
 
-        if isinstance(columns, str):
-            subset = [columns]
-        elif isinstance(columns, (list, tuple)):
-            subset = columns
-        elif isinstance(columns, slice):
-            start = columns.start
-            stop = columns.stop
+        # handle different input types
+        if isinstance(subset, str):
+            columns = [subset]
+        elif isinstance(subset, (list, tuple)):
+            columns = subset
+        elif isinstance(subset, slice):
+            start = subset.start
+            stop = subset.stop
 
             idx_start = self.columns.index(start)
             idx_stop = self.columns.index(stop)
 
-            subset = self.columns[idx_start:idx_stop+1]
+            columns = self.columns[idx_start:idx_stop + 1]
         else:
             raise ValueError("Subsetting requires str, list, tuple or slice. "
                              "However, {} was encountered."
-                             .format(type(columns)))
+                             .format(type(subset)))
 
-        return self.from_dict(self.to_dict(subset=subset))
+        # check column names
+        invalid = [column for column in columns
+                   if column not in self.columns]
+
+        if invalid:
+            raise ValueError("Columns '{}' does not exist. Available column "
+                             "names are: {}"
+                             .format(invalid, self.columns))
+
+        # get dtypes and data
+        dtypes = [self.get_column(column).dtype
+                  for column in columns]
+
+        data = [self.get_column(column).values
+                for column in columns]
+        # transpose data
+        data = list(zip(*data))
+
+        return TestDataTable(data=data, columns=columns, dtypes=dtypes)
 
     def __repr__(self):
         """Represent table as ASCII representation.
