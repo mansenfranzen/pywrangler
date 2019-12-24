@@ -846,9 +846,9 @@ class TestDataTable:
                  "d": "datetime"}
 
     def __init__(self,
-                 data: List[List],
-                 columns: List[str],
-                 dtypes: Optional[List[str]] = None):
+                 data: Sequence[Sequence],
+                 columns: Sequence[str],
+                 dtypes: Optional[Sequence[str]] = None):
         """Initialize `TestDataTable`. Dtypes have to provided either via
         `columns` as typed column annotations or directly via `dtypes`.
         Typed column annotations are a convenient way to omit the `dtypes`
@@ -1012,7 +1012,8 @@ class TestDataTable:
         return converter()
 
     @staticmethod
-    def from_dict(data: Dict[str, List]) -> 'TestDataTable':
+    def from_dict(data: 'collections.OrderedDict[str, Sequence]') \
+            -> 'TestDataTable':
         """Converts a python dict into TestDataTable. Assumes keys to be column
         names with type annotations and values to be values.
 
@@ -1033,16 +1034,23 @@ class TestDataTable:
 
         return TestDataTable(data=values, columns=columns)
 
-    def to_dict(self) -> Dict[str, list]:
+    def to_dict(self) -> 'collections.OrderedDict[str, tuple]':
         """Converts TestDataTable into dictionary with key as typed columns
         and values as data.
+
+        Returns
+        -------
+        table_dict: OrderedDict
 
         """
 
         columns = [("{}:{}".format(column.name, column.dtype), column.values)
                    for column in self._col_dict.values()]
 
-    def _parse_typed_columns(self, typed_columns: List[str]) \
+        return collections.OrderedDict(columns)
+
+    @staticmethod
+    def _parse_typed_columns(typed_columns: Sequence[str]) \
             -> Tuple[List[str], List[str]]:
         """Separates column names and corresponding type annotations from
         column names with type annotation strings.
@@ -1193,7 +1201,7 @@ class EngineTester:
 
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent: 'DataTestCase'):
         self.parent = parent
 
     def pandas(self, test_func: Callable, args: Optional[Iterable] = None,
