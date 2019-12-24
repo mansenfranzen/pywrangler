@@ -1076,14 +1076,14 @@ class TestDataTable:
         cols, types = zip(*splitted)
 
         # complete type abbreviations
-        types = [self.TYPE_ABBR.get(x, x) for x in types]
+        types = [TYPE_ABBR.get(x, x) for x in types]
 
         # check valid types
-        invalid_types = set(types).difference(self.TYPE_ABBR.values())
+        invalid_types = set(types).difference(TYPE_ABBR.values())
         if invalid_types:
             raise ValueError("Invalid types encountered: {}. Valid types "
                              "are: {}."
-                             .format(invalid_types, self.TYPE_ABBR.items()))
+                             .format(invalid_types, TYPE_ABBR.items()))
 
         return cols, types
 
