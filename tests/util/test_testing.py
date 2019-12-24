@@ -11,13 +11,15 @@ import numpy as np
 import pandas as pd
 from numpy.testing import assert_equal as np_assert_equal
 
+from pyspark.sql import functions as F
+
 from pywrangler.base import BaseWrangler
 from pywrangler.util.testing import (
     NULL,
     NaN,
     TestDataTable,
-    concretize_abstract_wrangler
-)
+    concretize_abstract_wrangler,
+    DataTestCase, ConverterFromPandas)
 
 
 def test_concretize_abstract_wrangler():
@@ -209,12 +211,13 @@ def test_data_table_assertions():
 def create_test_table(cols, rows, reverse_cols=False, reverse_rows=False):
     """Helper function to automatically create instances of TestDataTable.
 
+    `cols` contains typed column annotations like "col1:int".
     """
 
     if reverse_cols:
         cols = cols[::-1]
 
-    dtypes, columns = zip(*[col.split("_") for col in cols])
+    columns, dtypes = zip(*[col.split(":") for col in cols])
 
     values = list(range(1, rows + 1))
     mapping = {"str": list(map(str, values)),
@@ -250,8 +253,8 @@ def create_test_table_special(values, dtype):
 
 def test_assert_equal_basics():
     # equal values should be equal
-    left = create_test_table(["int_a", "int_b"], 10)
-    right = create_test_table(["int_a", "int_b"], 10)
+    left = create_test_table(["a:int", "b:int"], 10)
+    right = create_test_table(["a:int", "b:int"], 10)
     left.assert_equal(right)
 
     # different values should not be equal
@@ -262,39 +265,39 @@ def test_assert_equal_basics():
 
     # incorrect number of rows
     with pytest.raises(AssertionError):
-        left = create_test_table(["int_a", "int_b"], 10)
-        right = create_test_table(["int_a", "int_b"], 5)
+        left = create_test_table(["a:int", "b:int"], 10)
+        right = create_test_table(["a:int", "b:int"], 5)
         left.assert_equal(right)
 
     # incorrect number of columns
     with pytest.raises(AssertionError):
-        left = create_test_table(["int_a"], 10)
-        right = create_test_table(["int_a", "int_b"], 10)
+        left = create_test_table(["a:int"], 10)
+        right = create_test_table(["a:int", "b:int"], 10)
         left.assert_equal(right)
 
     # incorrect column_names
     with pytest.raises(AssertionError):
-        left = create_test_table(["int_a", "int_c"], 10)
-        right = create_test_table(["int_a", "int_b"], 10)
+        left = create_test_table(["a:int", "c:int"], 10)
+        right = create_test_table(["a:int", "b:int"], 10)
         left.assert_equal(right)
 
     # incorrect dtypes
     with pytest.raises(AssertionError):
-        left = create_test_table(["int_a", "str_b"], 10)
-        right = create_test_table(["int_a", "int_b"], 10)
+        left = create_test_table(["a:int", "b:str"], 10)
+        right = create_test_table(["a:int", "b:int"], 10)
         left.assert_equal(right)
 
     # check column order
-    left = create_test_table(["int_a", "int_b"], 10, reverse_cols=True)
-    right = create_test_table(["int_a", "int_b"], 10)
+    left = create_test_table(["a:int", "b:int"], 10, reverse_cols=True)
+    right = create_test_table(["a:int", "b:int"], 10)
     left.assert_equal(right, assert_column_order=False)
 
     with pytest.raises(AssertionError):
         left.assert_equal(right, assert_column_order=True)
 
     # check row order
-    left = create_test_table(["int_a", "int_b"], 10, reverse_rows=True)
-    right = create_test_table(["int_a", "int_b"], 10)
+    left = create_test_table(["a:int", "b:int"], 10, reverse_rows=True)
+    right = create_test_table(["a:int", "b:int"], 10)
     left.assert_equal(right, assert_row_order=False)
 
     with pytest.raises(AssertionError):
@@ -323,6 +326,172 @@ def test_assert_equal_special():
         left = create_test_table_special([1.1], "float")
         right = create_test_table_special([NaN], "float")
         left.assert_equal(right)
+
+
+def test_testdatatable_from_dict():
+
+    data = collections.OrderedDict(
+        [("col1:int", [1, 2, 3]),
+         ("col2:s", ["a", "b", "c"])]
+    )
+
+    df = TestDataTable.from_dict(data)
+
+    # check correct column order and dtypes
+    np_assert_equal(df.columns, ("col1", "col2"))
+    np_assert_equal(df.dtypes, ["int", "str"])
+
+    # check correct values
+    np_assert_equal(df.get_column("col1").values, (1, 2, 3))
+    np_assert_equal(df.get_column("col2").values, ("a", "b", "c"))
+
+
+def test_testdatatable_to_dict():
+
+    df = create_test_table(["col2:str", "col1:int"], 2)
+
+    to_dict = df.to_dict()
+    keys = list(to_dict.keys())
+    values = list(to_dict.values())
+
+    # check column order and dtypes
+    np_assert_equal(keys, ["col2:str", "col1:int"])
+
+    # check values
+    np_assert_equal(values[0], ["1", "2"])
+    np_assert_equal(values[1], [1, 2])
+
+
+def test_testdatatable_getitem_subset():
+
+    df = create_test_table(["col1:str", "col2:int", "col3:int"], 2)
+    df_sub = create_test_table(["col1:str", "col2:int"], 2)
+
+    cmp_kwargs = dict(assert_column_order=True,
+                      assert_row_order=True)
+
+    # test list of strings, slice and string
+    df["col1", "col2"].assert_equal(df_sub, **cmp_kwargs)
+    df["col1":"col2"].assert_equal(df_sub, **cmp_kwargs)
+    df["col1"].assert_equal(df_sub["col1"], **cmp_kwargs)
+
+    # test incorrect type
+    with pytest.raises(ValueError):
+        df[{"col1"}]
+
+    # test invalid column name
+    with pytest.raises(ValueError):
+        df["non_existant"]
+
+
+def test_testdatatable_get_column():
+    df = create_test_table(["col1:str", "col2:int"], 2)
+    assert df.get_column("col1") is df._col_dict["col1"]
+
+
+def test_testdatatable_parse_typed_columns():
+    parse = TestDataTable._parse_typed_columns
+
+    # invalid splits
+    cols = ["col1:int", "col2"]
+    with pytest.raises(ValueError):
+        parse(cols)
+
+    # invalid types
+    cols = ["col1:asd"]
+    with pytest.raises(ValueError):
+        parse(cols)
+
+    # invalid abbreviations
+    cols = ["col1:a"]
+    with pytest.raises(ValueError):
+        parse(cols)
+
+    # correct types and columns
+    cols = ["col1:str", "col2:s",
+            "col3:int", "col4:i",
+            "col5:float", "col6:f",
+            "col7:bool", "col8:b",
+            "col9:datetime", "col10:d"]
+
+    names = ["col{}".format(x) for x in range(1, 11)]
+    dtypes = ["str", "str",
+              "int", "int",
+              "float", "float",
+              "bool", "bool",
+              "datetime", "datetime"]
+
+    result = (names, dtypes)
+    np_assert_equal(parse(cols), result)
+
+
+def test_engine_tester_pandas():
+    class Dummy(DataTestCase):
+        def data(self):
+            return {"col1:i": [1, 2, 3],
+                    "col2:i": [2, 3, 4]}
+
+        def input(self):
+            return self.data["col1"]
+
+        def output(self):
+            return self.data
+
+    def test_func(df):
+        df = df.copy()
+        df["col2"] = df["col1"] + 1
+        return df
+
+    Dummy("pandas").test(test_func)
+
+    # check merge input column
+    def test_func(df):
+        return df["col1"].add(1).to_frame("col2")
+
+    Dummy("pandas").test(test_func, merge_input=True)
+
+    # pass args/kwargs
+    def test_func(df, add, mul=0):
+        return df["col1"].add(add).mul(mul).to_frame("col2")
+
+    Dummy("pandas").test(test_func,
+                         args=(1,),
+                         kwargs={"mul": 1},
+                         merge_input=True)
+
+def test_engine_tester_pyspark():
+    class Dummy(DataTestCase):
+        def data(self):
+            return {"col1:i": [1, 2, 3],
+                    "col2:i": [2, 3, 4]}
+
+        def input(self):
+            return self.data["col1"]
+
+        def output(self):
+            return self.data
+
+    def test_func(df):
+        return df.withColumn("col2", F.col("col1")+1)
+
+    Dummy("pyspark").test(test_func)
+    Dummy("pyspark").test(test_func, repartition=2)
+
+    # pass args/kwargs
+    def test_func(df, add, mul=0):
+        return df.withColumn("col2", (F.col("col1")+add)*mul)
+
+    Dummy("pyspark").test(test_func,
+                          args=(1,),
+                          kwargs={"mul": 1})
+
+def test_inspect_dtype_from_pandas():
+    inspect = ConverterFromPandas.inspect_dtype
+
+    # raise if incorret type
+    ser = pd.Series("asd", dtype=object)
+    with pytest.raises(ValueError):
+        inspect(ser)
 
 
 @pytest.fixture
@@ -434,6 +603,12 @@ def test_testdatatable_from_pandas_special():
     assert df_conv.get_column("datetime").dtype == "datetime"
     assert df_conv.get_column("datetime").values == \
            (datetime.datetime(2019, 1, 1), datetime.datetime(2019, 1, 2))
+
+    # dtype object with strings and nan should pass correctly
+    df = pd.DataFrame({"str": ["foo", "bar", NaN]}, dtype=object)
+    df_conv = TestDataTable.from_pandas(df)
+    assert df_conv.get_column("str").dtype == "str"
+    assert df_conv.get_column("str").values == ("foo", "bar", NULL)
 
 
 @pytest.fixture
