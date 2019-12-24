@@ -760,7 +760,7 @@ class EqualityAsserter:
                     raise AssertionError(
                         "Mismatching column names at index {}: "
                         "left '{}' vs. right '{}'"
-                        .format(idx + 1, left, right)
+                            .format(idx + 1, left, right)
                     )
         else:
             left = set(self.parent.columns)
@@ -1189,7 +1189,7 @@ class TestDataTable:
         return TestDataTable(data=data, columns=columns, dtypes=dtypes)
 
     def __repr__(self):
-        """Represent table as ASCII representation.
+        """Get table as ASCII representation.
 
         """
 
@@ -1301,7 +1301,7 @@ class EngineTester:
                 df_result = pd.merge(df_input, df_result, left_index=True,
                                      right_index=True, how="inner")
 
-        output = self.parent.ouput()
+        output = self.parent.output
         output.assert_equal(TestDataTable.from_pandas(df_result))
 
     def pyspark(self, test_func: Callable, args: Optional[Iterable] = None,
