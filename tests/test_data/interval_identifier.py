@@ -921,3 +921,51 @@ def last_start_last_end_start_begins(start, end, noise, target_column_name):
             [19,     1,        start,   0]]
 
     return _return_dfs(data, target_column_name)
+
+
+def first_start_last_end_end_begins(start, end, noise, target_column_name):
+    # cols:  order1, groupby1, marker, iid"""
+    data = [[1,      1,        end,     0],
+            [2,      1,        noise,   0],
+            [3,      1,        start,   1],
+            [4,      1,        noise,   1],
+            [5,      1,        noise,   1],
+            [6,      1,        noise,   1],
+            [7,      1,        end,     1],
+            [8,      1,        end,     1],
+            [9,      1,        start,   2],
+            [10,     1,        start,   2],
+            [11,     1,        start,   2],
+            [12,     1,        noise,   2],
+            [13,     1,        end,     2],
+            [14,     1,        start,   3],
+            [15,     1,        noise,   3],
+            [16,     1,        end,     3],
+            [17,     1,        end,     3],
+            [18,     1,        end,     3]]
+
+    return _return_dfs(data, target_column_name)
+
+
+def first_start_last_end_start_begins(start, end, noise, target_column_name):
+    # cols:  order1, groupby1, marker, iid"""
+    data = [[1,      1,        start,   1],
+            [2,      1,        noise,   1],
+            [3,      1,        start,   1],
+            [4,      1,        noise,   1],
+            [5,      1,        noise,   1],
+            [6,      1,        noise,   1],
+            [7,      1,        end,     1],
+            [8,      1,        end,     1],
+            [9,      1,        start,   2],
+            [10,     1,        start,   2],
+            [11,     1,        start,   2],
+            [12,     1,        noise,   2],
+            [13,     1,        end,     2],
+            [14,     1,        start,   3],
+            [15,     1,        noise,   3],
+            [16,     1,        end,     3],
+            [17,     1,        end,     3],
+            [18,     1,        end,     3]]
+
+    return _return_dfs(data, target_column_name)
