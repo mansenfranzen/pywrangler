@@ -144,8 +144,8 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         bool_start_end = bool_start + bool_end
 
         # ffill marker start
-        ffill = F.when(marker_col == self.marker_start, 1)\
-            .when(marker_col == self.marker_end, 0)\
+        ffill = F.when(marker_col == self.marker_start, 1) \
+            .when(marker_col == self.marker_end, 0) \
             .otherwise(None)
 
         ffill_col = F.last(ffill, ignorenulls=True).over(w_lag.rowsBetween(-sys.maxsize, 0))
@@ -166,7 +166,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         valid_ids = F.when(bool_valid, ser_id).otherwise(0)
 
         return df.withColumn(self.target_column_name, valid_ids)
-
 
     def transform_last_start_last_end(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
@@ -229,3 +228,63 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         valid_ids = F.when(bool_valid, ser_id).otherwise(0)
 
         return df.withColumn(self.target_column_name, valid_ids).orderBy(orderby)
+
+    def transform_first_start_last_end(self, df: DataFrame) -> DataFrame:
+        """Extract interval ids from given dataframe.
+
+        Parameters
+        ----------
+        df: pyspark.sql.Dataframe
+
+        Returns
+        -------
+        result: pyspark.sql.Dataframe
+            Same columns as original dataframe plus the new interval id column.
+
+        """
+
+        # check input
+        self.validate_input(df)
+
+        # define window specs
+        orderby = util.prepare_orderby(self.order_columns, self.ascending)
+        groupby = self.groupby_columns or []
+
+        w_lag = Window.partitionBy(groupby).orderBy(orderby)
+        w_id = Window.partitionBy(groupby + [self.target_column_name])
+
+        # get boolean series with start and end markers
+        marker_col = F.col(self.marker_column)
+
+        # account for identical start and end markers
+        # if self._identical_start_end_markers:
+        #   ser_id = F.sum(bool_start).over(w_lag)
+        #   return df.withColumn(self.target_column_name, ser_id)
+
+        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
+        start_ende = F.when(marker_col == self.marker_start, 1) \
+            .when(marker_col == self.marker_end, 0) \
+            .otherwise(None)
+        ffill = F.last(start_ende, ignorenulls=True) \
+            .over(w_lag.rowsBetween(-sys.maxsize, 0))
+        ffill_shift = F.lag(ffill, default=0, count=1) \
+            .over(w_lag) \
+            .cast("integer")
+
+        start_and_fill_shift = F.when(ffill == ffill_shift, 0) \
+            .otherwise(ffill)
+
+        cum_sum = F.sum(start_and_fill_shift) \
+            .over(w_lag)
+        df = df.withColumn(self.target_column_name, cum_sum)
+
+        # delete noise in groups
+        ser_id = F.when((~marker_col.isin([self.marker_start, self.marker_end])) &
+                        (ffill == 0), None) \
+            .otherwise(cum_sum)
+
+        bfill = F.first(ser_id, ignorenulls=True) \
+            .over(w_id.orderBy(orderby).rowsBetween(0, sys.maxsize))
+        return df.withColumn(self.target_column_name, bfill) \
+            .withColumn(self.target_column_name, F.when(F.isnull(self.target_column_name), 0) \
+                        .otherwise(cum_sum))
