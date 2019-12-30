@@ -23,6 +23,16 @@ def plainframe_standard():
 
 
 @pytest.fixture
+def plainframe_missings():
+    cols = ["int", "float", "bool", "str", "datetime"]
+    data = [[1, 1.1, True, "string", "2019-01-01 10:00:00"],
+            [2, NaN, False, "string2", "2019-02-01 10:00:00"],
+            [NULL, NULL, NULL, NULL, NULL]]
+
+    return PlainFrame(data=data, dtypes=cols, columns=cols)
+
+
+@pytest.fixture
 def df_from_pandas():
     df = pd.DataFrame(
         {"int": [1, 2],
@@ -124,16 +134,6 @@ def create_plainframe_single(values, dtype):
     return PlainFrame(data=data, dtypes=dtypes, columns=columns)
 
 
-@pytest.fixture
-def plainframe_missings():
-    cols = ["int", "float", "bool", "str", "datetime"]
-    data = [[1, 1.1, True, "string", "2019-01-01 10:00:00"],
-            [2, NaN, False, "string2", "2019-02-01 10:00:00"],
-            [NULL, NULL, NULL, NULL, NULL]]
-
-    return PlainFrame(data=data, dtypes=cols, columns=cols)
-
-
 def test_plainframe_init(plainframe_missings):
     df = plainframe_missings
     col_values = lambda x: df.get_column(x).values
@@ -141,7 +141,7 @@ def test_plainframe_init(plainframe_missings):
     assert df.columns == ["int", "float", "bool", "str", "datetime"]
     assert df.dtypes == ["int", "float", "bool", "str", "datetime"]
     assert col_values("int") == (1, 2, NULL)
-    assert col_values("str") == ("string1", "string2", NULL)
+    assert col_values("str") == ("string", "string2", NULL)
     assert col_values("datetime")[0] == datetime.datetime(2019, 1, 1, 10)
 
 
@@ -388,7 +388,7 @@ def test_inspect_dtype_from_pandas():
 
     # raise if incorret type
     ser = pd.Series("asd", dtype=object)
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         inspect(ser)
 
 

@@ -6,15 +6,13 @@ from pywrangler.util.testing.datatestcase import DataTestCase
 
 def test_engine_tester_pandas():
     class Dummy(DataTestCase):
-        def data(self):
-            return {"col1:i": [1, 2, 3],
-                    "col2:i": [2, 3, 4]}
 
         def input(self):
-            return self.data["col1"]
+            return self.output["col1"]
 
         def output(self):
-            return self.data
+            return {"col1:i": [1, 2, 3],
+                    "col2:i": [2, 3, 4]}
 
     def test_func(df):
         df = df.copy()
@@ -42,15 +40,12 @@ def test_engine_tester_pyspark():
     from pyspark.sql import functions as F
 
     class Dummy(DataTestCase):
-        def data(self):
-            return {"col1:i": [1, 2, 3],
-                    "col2:i": [2, 3, 4]}
-
         def input(self):
-            return self.data["col1"]
+            return self.output["col1"]
 
         def output(self):
-            return self.data
+            return {"col1:i": [1, 2, 3],
+                    "col2:i": [2, 3, 4]}
 
     def test_func(df):
         return df.withColumn("col2", F.col("col1")+1)
