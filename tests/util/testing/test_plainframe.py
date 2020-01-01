@@ -344,7 +344,7 @@ def test_testdatatable_getitem_subset():
 
 def test_testdatatable_get_column():
     df = create_plain_frame(["col1:str", "col2:int"], 2)
-    assert df.get_column("col1") is df._col_dict["col1"]
+    assert df.get_column("col1") is df.plaincolumns["col1"]
 
 
 def test_testdatatable_parse_typed_columns():
