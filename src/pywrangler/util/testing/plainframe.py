@@ -3,9 +3,11 @@
 """
 import collections
 import copy
+import functools
 import numbers
+from collections import OrderedDict
 from datetime import datetime
-from typing import Sequence, Optional, Tuple, List, Union, Dict, Iterable, Any
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -62,7 +64,7 @@ class PlainColumn:
 
     """
 
-    def __init__(self, name: str, dtype: str, values: tuple):
+    def __init__(self, name: str, dtype: str, values: Sequence):
 
         self.name = name
         self.dtype = dtype
@@ -74,8 +76,8 @@ class PlainColumn:
             values = self._preprocess_datetime(values)
 
         # sanity check for dtypes
-        self._check_dtype(values)
         self.values = values
+        self._check_dtype()
 
         # get null/nan flags
         self.has_null = any([x is NULL for x in values])
@@ -86,7 +88,7 @@ class PlainColumn:
         self.to_pyspark = ConverterToPySpark(self)
 
     @staticmethod
-    def _preprocess_datetime(values: tuple) \
+    def _preprocess_datetime(values: Sequence) \
             -> Tuple[Union[datetime, NullValue]]:
         """Convenience method to allow timestamps of various formats.
 
@@ -100,7 +102,7 @@ class PlainColumn:
         return tuple(processed)
 
     @staticmethod
-    def _preprocess_float(values: Tuple) -> Tuple[Union[float, NullValue]]:
+    def _preprocess_float(values: Sequence) -> Tuple[Union[float, NullValue]]:
         """Convenience method to ensure numeric values are casted to float.
 
         """
@@ -112,14 +114,14 @@ class PlainColumn:
 
         return tuple(processed)
 
-    def _check_dtype(self, values):
+    def _check_dtype(self):
         """Ensures correct type of all values. Raises TypeError.
 
         """
 
         allowed_types = PRIMITIVE_TYPES[self.dtype]
 
-        for value in values:
+        for value in self.values:
             if not isinstance(value, allowed_types):
                 raise TypeError("Column '{}' has invalud value '{}' with "
                                 "invalid type '{}'. Allowed types are: {}."
@@ -127,6 +129,17 @@ class PlainColumn:
                                         value,
                                         type(value),
                                         allowed_types))
+
+    def modify(self, modifications: Dict[int, Any]) -> 'PlainColumn':
+        """Modifies PlainColumn and return new instance.
+
+        """
+
+        n_rows = len(self.values)
+        values = [modifications.get(idx, self.values[idx])
+                  for idx in range(n_rows)]
+
+        return PlainColumn(name=self.name, dtype=self.dtype, values=values)
 
 
 class PlainFrame:
@@ -157,12 +170,6 @@ class PlainFrame:
     itself because it only represents data.
 
     """
-
-    TYPE_ABBR = {"i": "int",
-                 "b": "bool",
-                 "f": "float",
-                 "s": "str",
-                 "d": "datetime"}
 
     def __init__(self,
                  data: Sequence[Sequence],
@@ -208,16 +215,77 @@ class PlainFrame:
         # validate inputs
         self._validata_inputs()
 
-        # convenient attributes
-        self.n_rows = len(data)
-        self.n_cols = len(columns)
+    @property
+    def n_rows(self) -> int:
+        """Return the number of rows.
+
+        """
+
+        return len(self.data)
+
+    @property
+    def n_cols(self):
+        """Returns the number columns.
+
+        """
+
+        return len(self.columns)
+
+    @property
+    @functools.lru_cache()
+    def plaincolumns(self) -> 'OrderedDict[str, PlainColumn]':
+        """Creates an ordered dictionary of PlainColumn instances. Keys refer
+        to column names and values represent actual PlainColumn instances. This
+        mainly used for column wise operations.
+
+        """
 
         zipped = zip(self.columns, self.dtypes, zip(*self.data))
-        _columns = [(column, PlainColumn(column, dtype, data))
-                    for column, dtype, data in zipped]
-        self._col_dict = collections.OrderedDict(_columns)
+        columns = [(column, PlainColumn(column, dtype, data))
+                   for column, dtype, data in zipped]
 
-        self.assert_equal = EqualityAsserter(self)
+        return OrderedDict(columns)
+
+    @property
+    @functools.lru_cache()
+    def assert_equal(self) -> 'EqualityAsserter':
+        """Return equality assertion composite.
+
+        """
+
+        return EqualityAsserter(self)
+
+    def modify(self, modifications: Dict[str, Dict[int, Any]]):
+        """Modifies PlainFrame with given modifications and return new instance
+        of it.
+
+        """
+
+        columns = OrderedDict()
+
+        for name, column in self.plaincolumns.items():
+            if name in modifications:
+                modification = modifications[name]
+                modified = column.modify(modification)
+                columns[name] = modified
+            else:
+                columns[name] = column
+
+        return PlainFrame.from_plaincolumns(columns)
+
+    @classmethod
+    def from_plaincolumns(cls, plaincolumns: 'OrderedDict[str, PlainColumn]'):
+
+        columns = list(plaincolumns.keys())
+        dtypes = [column.dtype for column in plaincolumns.values()]
+        data = [column.values for column in plaincolumns.values()]
+        data = list(zip(*data))
+
+        return cls(data=data, columns=columns, dtypes=dtypes)
+
+    def to_plaincolumns(self) -> 'OrderedDict[str, PlainColumn]':
+
+        return self.plaincolumns
 
     def to_pandas(self) -> pd.DataFrame:
         """Converts test data table into a pandas dataframe.
@@ -225,7 +293,7 @@ class PlainFrame:
         """
 
         data = {name: column.to_pandas()
-                for name, column in self._col_dict.items()}
+                for name, column in self.plaincolumns.items()}
 
         return pd.DataFrame(data)
 
@@ -237,7 +305,8 @@ class PlainFrame:
         from pyspark.sql import SparkSession
         from pyspark.sql import types
 
-        converted = [column.to_pyspark() for column in self._col_dict.values()]
+        converted = [column.to_pyspark() for column in
+                     self.plaincolumns.values()]
         fields, values = zip(*converted)
 
         data = list(zip(*values))
@@ -284,6 +353,9 @@ class PlainFrame:
             raise ValueError("Duplicated column names encountered: {}. "
                              "Please use unique column names."
                              .format(duplicates))
+
+        # create plaincolumns which has additional type validity checks
+        plaincolumns = self.plaincolumns
 
     @staticmethod
     def from_pandas(df: pd.DataFrame, dtypes: TYPE_DTYPE_INPUT = None) \
@@ -364,7 +436,7 @@ class PlainFrame:
         """
 
         columns = [("{}:{}".format(column.name, column.dtype), column.values)
-                   for column in self._col_dict.values()]
+                   for column in self.plaincolumns.values()]
 
         return collections.OrderedDict(columns)
 
@@ -420,7 +492,7 @@ class PlainFrame:
 
         """
 
-        return self._col_dict[name]
+        return self.plaincolumns[name]
 
     def __getitem__(self, subset: Union[str, Sequence[str], slice]) \
             -> 'PlainFrame':
@@ -1014,8 +1086,8 @@ class EqualityAsserter:
             order_right = self._get_row_order(other)
 
         for column in self.parent.columns:
-            left = self.parent._col_dict[column].values
-            right = other._col_dict[column].values
+            left = self.parent.plaincolumns[column].values
+            right = other.plaincolumns[column].values
 
             if not assert_row_order:
                 left = [left[idx] for idx in order_left]
@@ -1079,10 +1151,10 @@ class EqualityAsserter:
         """
 
         left_dtypes = {name: column.dtype
-                       for name, column in self.parent._col_dict.items()}
+                       for name, column in self.parent.plaincolumns.items()}
 
         right_dtypes = {name: column.dtype
-                        for name, column in other._col_dict.items()}
+                        for name, column in other.plaincolumns.items()}
 
         if left_dtypes != right_dtypes:
             msg = "Mismatching types: "
