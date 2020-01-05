@@ -7,7 +7,8 @@ import functools
 import numbers
 from collections import OrderedDict
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, \
+    Union, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,7 @@ from numpy.testing import assert_equal
 from pandas.api import types
 
 
+@functools.total_ordering
 class NullValue:
     """Represents null values. Provides operator comparison functions to allow
     sorting which is required to determine row order of data tables.
@@ -28,14 +30,11 @@ class NullValue:
     def __lt__(self, other):
         return self
 
-    def __gt__(self, other):
-        return other
-
     def __eq__(self, other):
         return isinstance(other, NullValue)
 
-    def __ne__(self, other):
-        return self.__eq__(other) is False
+    def __hash__(self):
+        return hash(repr(self))
 
 
 NaN = np.NaN
@@ -56,36 +55,66 @@ TYPE_ABBR = {"i": "int",
              "s": "str",
              "d": "datetime"}
 
+_ImmutablePlainColumn = NamedTuple("_ImmutablePlainColumn",
+                                   [("name", str),
+                                    ("dtype", str),
+                                    ("values", tuple)])
 
-class PlainColumn:
-    """Represents a single column of a PlainFrame. Handles dtype specific
-    preprocessing and performs type validation. In addition, it contains
-    conversion methods for all supported computation engines.
+
+class PlainColumn(_ImmutablePlainColumn):
+    """Represents an immutable column of a PlainFrame consisting of a name,
+    dtype and values. Ensures type validity.
+
+    Instantiation should be performed via `from_plain` factory method which
+    adds preprocessing steps to ensure type correctness.
+
+    In addition, it contains conversion methods for all supported computation
+    engines.
 
     """
 
-    def __init__(self, name: str, dtype: str, values: Sequence):
-
-        self.name = name
-        self.dtype = dtype
-
-        # preprocess
-        if dtype == "float":
-            values = self._preprocess_float(values)
-        elif dtype == "datetime":
-            values = self._preprocess_datetime(values)
-
-        # sanity check for dtypes
-        self.values = values
+    def __init__(self, *args, **kwargs):
         self._check_dtype()
 
-        # get null/nan flags
-        self.has_null = any([x is NULL for x in values])
-        self.has_nan = any([x is np.NaN for x in values])
+    @property
+    def typed_column(self) -> str:
+        """Return typed column annotation of PlainColumn.
 
-        # add composite converters
-        self.to_pandas = ConverterToPandas(self)
-        self.to_pyspark = ConverterToPySpark(self)
+        """
+
+        return "{}:{}".format(self.name, self.dtype)
+
+    @property
+    def has_null(self) -> bool:
+        """Signals presence of NULL values.
+
+        """
+
+        return any([x is NULL for x in self.values])
+
+    @property
+    def has_nan(self) -> bool:
+        """Signals presence of NaN values.
+
+        """
+
+        return any([x is np.NaN for x in self.values])
+
+    @property
+    def to_pandas(self) -> 'ConverterToPandas':
+        """Composite for conversion functionality to pandas.
+
+        """
+
+        return ConverterToPandas(self)
+
+    @property
+    def to_pyspark(self) -> 'ConverterToPySpark':
+        """Composite for conversion functionality to pyspark.
+
+        """
+
+        return ConverterToPySpark(self)
 
     @staticmethod
     def _preprocess_datetime(values: Sequence) \
@@ -141,10 +170,48 @@ class PlainColumn:
 
         return PlainColumn(name=self.name, dtype=self.dtype, values=values)
 
+    @classmethod
+    def from_plain(cls, name: str, dtype: str, values: Sequence) \
+            -> 'PlainColumn':
+        """Factory method to instantiate PlainColumn from plain objects. Adds
+        preprocessing steps for float and datetime types.
 
-class PlainFrame:
-    """Resembles a dataframe in plain python. Its main purpose is to represent
-    test data that is independent of any computation engine specific
+        Parameters
+        ----------
+        name: str
+            Name of the column.
+        dtype: str
+            Data type of the column. Must be one of bool, int, float, str or
+            datetime.
+        values: sequence
+            sequence of values
+
+        Returns
+        -------
+        plaincolumn: PlainColumn
+
+        """
+
+        # preprocess
+        if dtype == "float":
+            values = cls._preprocess_float(values)
+        elif dtype == "datetime":
+            values = cls._preprocess_datetime(values)
+
+        values = tuple(values)
+
+        return cls(name=name, dtype=dtype, values=values)
+
+
+_ImmutablePlainFrame = NamedTuple("_ImmutablePlainFrame",
+                                  [("data", Tuple[Tuple]),
+                                   ("columns", Tuple[str]),
+                                   ("dtypes", Tuple[str])])
+
+
+class PlainFrame(_ImmutablePlainFrame):
+    """Resembles an immutable dataframe in plain python. Its main purpose is to
+    represent test data that is independent of any computation engine specific
     characteristics. It serves as a common baseline format. However, in order
     to be usable for all engines, it can be converted to and from any
     computation engine's data representation. This allows to formulate test
@@ -171,48 +238,7 @@ class PlainFrame:
 
     """
 
-    def __init__(self,
-                 data: Sequence[Sequence],
-                 columns: Sequence[str],
-                 dtypes: Optional[Sequence[str]] = None):
-        """Initialize `PlainFrame`. Dtypes have to provided either via
-        `columns` as typed column annotations or directly via `dtypes`.
-        Typed column annotations are a convenient way to omit the `dtypes`
-        parameter while specifying dtypes directly with the `columns`
-        parameter.
-
-        An exmaple of a typed column annotation is as follows:
-        >>> columns = ["col_a:int", "col_b:str", "col_c:float"]
-
-        Abbreviations may also be used like:
-        >>> columns = ["col_a:i", "col_b:s", "col_c:f"]
-
-        For a complete abbreviation mapping, please see `TYPE_ABBR`.
-
-        Parameters
-        ----------
-        data: list
-            List of iterables representing the input data.
-        columns: list
-            List of strings representing the column names. Typed annotations
-            are allowed to be used here and will be checked of `dtypes` is not
-            provided.
-        dtypes: list, optional
-            List of column types.
-
-        """
-
-        # set attributes
-        self.data = data
-
-        # check for typed columns
-        if dtypes is None:
-            self.columns, self.dtypes = self._parse_typed_columns(columns)
-        else:
-            self.columns = columns
-            self.dtypes = dtypes
-
-        # validate inputs
+    def __init__(self, *args, **kwargs):
         self._validata_inputs()
 
     @property
@@ -233,21 +259,19 @@ class PlainFrame:
 
     @property
     @functools.lru_cache()
-    def plaincolumns(self) -> 'OrderedDict[str, PlainColumn]':
-        """Creates an ordered dictionary of PlainColumn instances. Keys refer
-        to column names and values represent actual PlainColumn instances. This
-        mainly used for column wise operations.
+    def plaincolumns(self) -> Tuple[PlainColumn]:
+        """Creates a tuple of PlainColumn instances. This is mainly used for
+        column wise access.
 
         """
 
         zipped = zip(self.columns, self.dtypes, zip(*self.data))
-        columns = [(column, PlainColumn(column, dtype, data))
+        columns = [PlainColumn.from_plain(column, dtype, data)
                    for column, dtype, data in zipped]
 
-        return OrderedDict(columns)
+        return tuple(columns)
 
     @property
-    @functools.lru_cache()
     def assert_equal(self) -> 'EqualityAsserter':
         """Return equality assertion composite.
 
@@ -255,47 +279,45 @@ class PlainFrame:
 
         return EqualityAsserter(self)
 
-    def modify(self, modifications: Dict[str, Dict[int, Any]]):
-        """Modifies PlainFrame with given modifications and return new instance
+    def modify(self, modifications: Dict[str, Dict[int, Any]]) -> 'PlainFrame':
+        """Change PlainFrame with given modifications and return new instance
         of it.
+
+        Parameters
+        ----------
+        modifications: dict
+            Contains modifications. Keys represent column names and values
+            represent column specific modifications.
+
+        Returns
+        -------
+        modified: PlainFrame
 
         """
 
-        columns = OrderedDict()
+        data = []
 
-        for name, column in self.plaincolumns.items():
-            if name in modifications:
-                modification = modifications[name]
-                modified = column.modify(modification)
-                columns[name] = modified
-            else:
-                columns[name] = column
+        for plaincolumn in self.plaincolumns:
+            try:
+                modification = modifications[plaincolumn.name]
+                modified = plaincolumn.modify(modification)
+                data.append(modified)
+            except KeyError:
+                data.append(plaincolumn.values)
 
-        return PlainFrame.from_plaincolumns(columns)
+        data = tuple(zip(*data))
 
-    @classmethod
-    def from_plaincolumns(cls, plaincolumns: 'OrderedDict[str, PlainColumn]'):
-
-        columns = list(plaincolumns.keys())
-        dtypes = [column.dtype for column in plaincolumns.values()]
-        data = [column.values for column in plaincolumns.values()]
-        data = list(zip(*data))
-
-        return cls(data=data, columns=columns, dtypes=dtypes)
-
-    def to_plaincolumns(self) -> 'OrderedDict[str, PlainColumn]':
-
-        return self.plaincolumns
+        return PlainFrame(data=data, dtypes=self.dtypes, columns=self.columns)
 
     def to_pandas(self) -> pd.DataFrame:
         """Converts test data table into a pandas dataframe.
 
         """
 
-        data = {name: column.to_pandas()
-                for name, column in self.plaincolumns.items()}
+        data = {column.name: column.to_pandas()
+                for column in self.plaincolumns}
 
-        return pd.DataFrame(data)
+        return pd.DataFrame(data, columns=self.columns)
 
     def to_pyspark(self):
         """Converts test data table into a pandas dataframe.
@@ -306,7 +328,7 @@ class PlainFrame:
         from pyspark.sql import types
 
         converted = [column.to_pyspark() for column in
-                     self.plaincolumns.values()]
+                     self.plaincolumns]
         fields, values = zip(*converted)
 
         data = list(zip(*values))
@@ -319,6 +341,30 @@ class PlainFrame:
         """Check input parameter in regard to validity constraints.
 
         """
+
+        # assert tuples for columns, dtypes and data to ensure immutability
+        tpl = ("PlainFrame was instantiated incorrectly. {attribute} needs "
+               "to be a tuple, however {dtype} was encountered. Please use "
+               "`PlainFrame.from_plain` instead for convenient instantiation "
+               "and proper type casts.")
+
+        if not isinstance(self.columns, tuple):
+            raise ValueError(tpl.format(attribute="`columns`",
+                                        dtype=type(self.columns)))
+
+        if not isinstance(self.dtypes, tuple):
+            raise ValueError(tpl.format(attribute="`dtypes`",
+                                        dtype=type(self.dtypes)))
+
+        if not isinstance(self.data, tuple):
+            raise ValueError(tpl.format(attribute="`data`",
+                                        dtype=type(self.data)))
+
+        for idx, row in enumerate(self.data):
+            if not isinstance(row, tuple):
+                attribute = "Row {} of `data`".format(idx)
+                raise ValueError(tpl.format(attribute=attribute,
+                                            dtype=type(row)))
 
         # assert equal number of elements across rows
         row_lenghts = {len(row) for row in self.data}
@@ -354,13 +400,14 @@ class PlainFrame:
                              "Please use unique column names."
                              .format(duplicates))
 
-        # create plaincolumns which has additional type validity checks
-        plaincolumns = self.plaincolumns
+        # assert correct types
+        for plaincolumn in self.plaincolumns:
+            plaincolumn._check_dtype()
 
-    @staticmethod
-    def from_pandas(df: pd.DataFrame, dtypes: TYPE_DTYPE_INPUT = None) \
+    @classmethod
+    def from_pandas(cls, df: pd.DataFrame, dtypes: TYPE_DTYPE_INPUT = None) \
             -> 'PlainFrame':
-        """Converts pandas dataframe into TestDataTabble.
+        """Instantiate `PlainFrame` from pandas DataFrame.
 
         Parameters
         ----------
@@ -380,10 +427,10 @@ class PlainFrame:
 
         converter = ConverterFromPandas(df)
 
-        return converter(dtypes=dtypes)
+        return converter(cls, dtypes=dtypes)
 
-    @staticmethod
-    def from_pyspark(df: 'pyspark.sql.DataFrame') -> 'PlainFrame':
+    @classmethod
+    def from_pyspark(cls, df: 'pyspark.sql.DataFrame') -> 'PlainFrame':
         """Converts pandas dataframe into TestDataTabble.
 
         Parameters
@@ -400,13 +447,59 @@ class PlainFrame:
 
         converter = ConverterFromPySpark(df)
 
-        return converter()
+        return converter(cls)
 
-    @staticmethod
-    def from_dict(data: 'collections.OrderedDict[str, Sequence]') \
+    @classmethod
+    def from_plain(cls,
+                   data: Sequence[Sequence],
+                   columns: Sequence[str],
+                   dtypes: Optional[Sequence[str]] = None):
+        """Instantiate `PlainFrame` from plain python objects. Dtypes have to
+        be provided either via `columns` as typed column annotations or
+        directly via `dtypes`. Typed column annotations are a convenient way to
+        omit the `dtypes` parameter while specifying dtypes directly with the
+        `columns` parameter.
+
+        An exmaple of a typed column annotation is as follows:
+        >>> columns = ["col_a:int", "col_b:str", "col_c:float"]
+
+        Abbreviations may also be used like:
+        >>> columns = ["col_a:i", "col_b:s", "col_c:f"]
+
+        For a complete abbreviation mapping, please see `TYPE_ABBR`.
+
+        Parameters
+        ----------
+        data: list
+            List of iterables representing the input data.
+        columns: list
+            List of strings representing the column names. Typed annotations
+            are allowed to be used here and will be checked of `dtypes` is not
+            provided.
+        dtypes: list, optional
+            List of column types.
+
+        Returns
+        -------
+        plainframe: PlainFrame
+
+        """
+
+        # check for typed columns
+        if dtypes is None:
+            columns, dtypes = cls._parse_typed_columns(columns)
+
+        columns = tuple(columns)
+        dtypes = tuple(dtypes)
+        data = tuple([tuple(row) for row in data])
+
+        return cls(data=data, columns=columns, dtypes=dtypes)
+
+    @classmethod
+    def from_dict(cls, data: 'collections.OrderedDict[str, Sequence]') \
             -> 'PlainFrame':
-        """Converts a python dict into PlainFrame. Assumes keys to be column
-        names with type annotations and values to be values.
+        """Instantiate `PlainFrame` from ordered dict. Assumes keys to be
+        column names with type annotations and values to be values.
 
         Parameters
         ----------
@@ -416,14 +509,16 @@ class PlainFrame:
 
         Returns
         -------
-        datatable: PlainFrame
+        plainframe: PlainFrame
 
         """
 
-        columns, values = zip(*data.items())
-        values = list(zip(*values))
+        typed_columns, values = zip(*data.items())
+        columns, dtypes = cls._parse_typed_columns(typed_columns)
 
-        return PlainFrame(data=values, columns=columns)
+        data = tuple(zip(*values))
+
+        return cls(data=data, columns=columns, dtypes=dtypes)
 
     def to_dict(self) -> 'collections.OrderedDict[str, tuple]':
         """Converts PlainFrame into dictionary with key as typed columns
@@ -435,14 +530,14 @@ class PlainFrame:
 
         """
 
-        columns = [("{}:{}".format(column.name, column.dtype), column.values)
-                   for column in self.plaincolumns.values()]
+        columns = [(column.typed_column, column.values)
+                   for column in self.plaincolumns]
 
         return collections.OrderedDict(columns)
 
     @staticmethod
     def _parse_typed_columns(typed_columns: Sequence[str]) \
-            -> Tuple[List[str], List[str]]:
+            -> Tuple[Tuple[str], Tuple[str]]:
         """Separates column names and corresponding type annotations from
         column names with type annotation strings.
 
@@ -467,7 +562,7 @@ class PlainFrame:
         cols, types = zip(*splitted)
 
         # complete type abbreviations
-        types = [TYPE_ABBR.get(x, x) for x in types]
+        types = tuple([TYPE_ABBR.get(x, x) for x in types])
 
         # check valid types
         invalid_types = set(types).difference(TYPE_ABBR.values())
@@ -479,7 +574,7 @@ class PlainFrame:
         return cols, types
 
     def get_column(self, name: str) -> PlainColumn:
-        """Convenient access to TestDataColumn via column name.
+        """Convenient access to PlainColumn via column name.
 
         Parameters
         ----------
@@ -492,7 +587,10 @@ class PlainFrame:
 
         """
 
-        return self.plaincolumns[name]
+        idx = self.columns.index(name)
+        column = self.plaincolumns[idx]
+
+        return column
 
     def __getitem__(self, subset: Union[str, Sequence[str], slice]) \
             -> 'PlainFrame':
@@ -514,7 +612,9 @@ class PlainFrame:
         """
 
         # handle different input types
-        if isinstance(subset, str):
+        if isinstance(subset, int):
+            return tuple.__getitem__(self, subset)
+        elif isinstance(subset, str):
             columns = [subset]
         elif isinstance(subset, (list, tuple)):
             columns = subset
@@ -541,13 +641,16 @@ class PlainFrame:
                              .format(invalid, self.columns))
 
         # get dtypes and data
-        dtypes = [self.get_column(column).dtype
-                  for column in columns]
+        dtypes = tuple([self.get_column(column).dtype
+                        for column in columns])
+
+        columns = tuple(columns)
 
         data = [self.get_column(column).values
                 for column in columns]
+
         # transpose data
-        data = list(zip(*data))
+        data = tuple((zip(*data)))
 
         return PlainFrame(data=data, columns=columns, dtypes=dtypes)
 
@@ -591,10 +694,15 @@ class ConverterFromPySpark:
     def __init__(self, df: 'pyspark.sql.DataFrame'):
         self.df = df
 
-    def __call__(self) -> 'PlainFrame':
+    def __call__(self, cls) -> 'PlainFrame':
         """Converts pyspark dataframe to PlainFrame. Several types are not
         supported including BinaryType, DecimalType, ByteType, ArrayType and
         MapType.
+
+        Parameters
+        ----------
+        cls: type
+            Class used for instantiation.
 
         Returns
         -------
@@ -606,7 +714,7 @@ class ConverterFromPySpark:
         data = list(map(self.convert_null, self.df.collect()))
         columns, dtypes = self.get_column_dtypes()
 
-        return PlainFrame(data=data, columns=columns, dtypes=dtypes)
+        return cls.from_plain(data=data, columns=columns, dtypes=dtypes)
 
     def get_column_dtypes(self) -> Tuple[List[str], List[str]]:
         """Get column names and corresponding dtypes.
@@ -690,7 +798,7 @@ class ConverterFromPandas:
     def __init__(self, df: pd.DataFrame):
         self.df = df
 
-    def __call__(self,
+    def __call__(self, cls: PlainFrame,
                  dtypes: Optional[TYPE_DTYPE_INPUT] = None) \
             -> 'PlainFrame':
         """Converts pandas dataframe to PlainFrame. Dtypes will be inferred
@@ -701,6 +809,8 @@ class ConverterFromPandas:
 
         Parameters
         ----------
+        cls: type
+            Class used for instantiation.
         dtypes: list, dict, optional
             If list is provided, each value represents a dtype and maps to
             one column of the dataframe in given order. If dict is provided,
@@ -724,9 +834,9 @@ class ConverterFromPandas:
 
         data = list(zip(*data))
 
-        return PlainFrame(data=data,
-                          columns=self.df.columns.tolist(),
-                          dtypes=dtypes)
+        return cls.from_plain(data=data,
+                              columns=self.df.columns.tolist(),
+                              dtypes=dtypes)
 
     def get_forced_dtypes(self, dtypes: TYPE_DTYPE_INPUT) -> TYPE_DSTR:
         """Validate user provided `dtypes` parameter.
@@ -1086,8 +1196,8 @@ class EqualityAsserter:
             order_right = self._get_row_order(other)
 
         for column in self.parent.columns:
-            left = self.parent.plaincolumns[column].values
-            right = other.plaincolumns[column].values
+            left = self.parent.get_column(column).values
+            right = other.get_column(column).values
 
             if not assert_row_order:
                 left = [left[idx] for idx in order_left]
@@ -1150,11 +1260,11 @@ class EqualityAsserter:
 
         """
 
-        left_dtypes = {name: column.dtype
-                       for name, column in self.parent.plaincolumns.items()}
+        left_dtypes = {column.name: column.dtype
+                       for column in self.parent.plaincolumns}
 
-        right_dtypes = {name: column.dtype
-                        for name, column in other.plaincolumns.items()}
+        right_dtypes = {column.name: column.dtype
+                        for column in other.plaincolumns}
 
         if left_dtypes != right_dtypes:
             msg = "Mismatching types: "

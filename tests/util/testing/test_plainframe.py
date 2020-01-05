@@ -19,7 +19,7 @@ def plainframe_standard():
     data = [[1, 1.1, True, "string", "2019-01-01 10:00:00"],
             [2, 2, False, "string2", "2019-02-01 10:00:00"]]
 
-    return PlainFrame(data=data, dtypes=cols, columns=cols)
+    return PlainFrame.from_plain(data=data, dtypes=cols, columns=cols)
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def plainframe_missings():
             [2, NaN, False, "string2", "2019-02-01 10:00:00"],
             [NULL, NULL, NULL, NULL, NULL]]
 
-    return PlainFrame(data=data, dtypes=cols, columns=cols)
+    return PlainFrame.from_plain(data=data, dtypes=cols, columns=cols)
 
 
 @pytest.fixture
@@ -116,9 +116,9 @@ def create_plain_frame(cols, rows, reverse_cols=False, reverse_rows=False):
     if reverse_rows:
         data = data[::-1]
 
-    return PlainFrame(data=data,
-                      dtypes=dtypes,
-                      columns=columns)
+    return PlainFrame.from_plain(data=data,
+                                 dtypes=dtypes,
+                                 columns=columns)
 
 
 def create_plainframe_single(values, dtype):
@@ -131,85 +131,111 @@ def create_plainframe_single(values, dtype):
     dtypes = [dtype]
     columns = ["name"]
 
-    return PlainFrame(data=data, dtypes=dtypes, columns=columns)
+    return PlainFrame.from_plain(data=data, dtypes=dtypes, columns=columns)
 
 
 def test_plainframe_init(plainframe_missings):
     df = plainframe_missings
     col_values = lambda x: df.get_column(x).values
 
-    assert df.columns == ["int", "float", "bool", "str", "datetime"]
-    assert df.dtypes == ["int", "float", "bool", "str", "datetime"]
+    assert df.columns == ("int", "float", "bool", "str", "datetime")
+    assert df.dtypes == ("int", "float", "bool", "str", "datetime")
     assert col_values("int") == (1, 2, NULL)
     assert col_values("str") == ("string", "string2", NULL)
     assert col_values("datetime")[0] == datetime.datetime(2019, 1, 1, 10)
 
 
 def test_plainframe_init_assertions():
+    # incorrect instantiation with non tuples with non factory method
+    with pytest.raises(ValueError):
+        PlainFrame(data=[(1, 2), ],
+                   columns=("a", "b"),
+                   dtypes=("int", "int"))
+
+    with pytest.raises(ValueError):
+        PlainFrame(data=([1, 2],),
+                   columns=("a", "b"),
+                   dtypes=("int", "int"))
+
+    with pytest.raises(ValueError):
+        PlainFrame(data=((1, 2),),
+                   columns=["a", "b"],
+                   dtypes=("int", "int"))
+
+    with pytest.raises(ValueError):
+        PlainFrame(data=((1, 2),),
+                   columns=("a", "b"),
+                   dtypes=["int", "int"])
+
+    # correct instantiation
+    PlainFrame(data=((1, 2),),
+               columns=("a", "b"),
+               dtypes=("int", "int"))
+
     # unequal elements per row
     with pytest.raises(ValueError):
-        PlainFrame(data=[[1, 2],
-                         [1]],
-                   columns=["a", "b"],
-                   dtypes=["int", "int"])
+        PlainFrame.from_plain(data=[[1, 2],
+                                    [1]],
+                              columns=["a", "b"],
+                              dtypes=["int", "int"])
 
     # mismatch between number of columns and entries per row
     with pytest.raises(ValueError):
-        PlainFrame(data=[[1, 2],
-                         [1, 2]],
-                   columns=["a"],
-                   dtypes=["int", "int"])
+        PlainFrame.from_plain(data=[[1, 2],
+                                    [1, 2]],
+                              columns=["a"],
+                              dtypes=["int", "int"])
 
     # mismatch between number of dtypes and entries per row
     with pytest.raises(ValueError):
-        PlainFrame(data=[[1, 2],
-                         [1, 2]],
-                   columns=["a", "b"],
-                   dtypes=["int"])
+        PlainFrame.from_plain(data=[[1, 2],
+                                    [1, 2]],
+                              columns=["a", "b"],
+                              dtypes=["int"])
 
     # incorrect dtypes
     with pytest.raises(ValueError):
-        PlainFrame(data=[[1, 2],
-                         [1, 2]],
-                   columns=["a", "b"],
-                   dtypes=["int", "bad_type"])
+        PlainFrame.from_plain(data=[[1, 2],
+                                    [1, 2]],
+                              columns=["a", "b"],
+                              dtypes=["int", "bad_type"])
 
     # type errors conversion
     with pytest.raises(TypeError):
-        PlainFrame(data=[[1, 2],
-                         [1, 2]],
-                   columns=["a", "b"],
-                   dtypes=["int", "str"])
+        PlainFrame.from_plain(data=[[1, 2],
+                                    [1, 2]],
+                              columns=["a", "b"],
+                              dtypes=["int", "str"])
 
     with pytest.raises(TypeError):
-        PlainFrame(data=[[1, 2],
-                         [1, 2]],
-                   columns=["a", "b"],
-                   dtypes=["int", "bool"])
+        PlainFrame.from_plain(data=[[1, 2],
+                                    [1, 2]],
+                              columns=["a", "b"],
+                              dtypes=["int", "bool"])
 
     with pytest.raises(TypeError):
-        PlainFrame(data=[["1", 2],
-                         ["1", 2]],
-                   columns=["a", "b"],
-                   dtypes=["float", "int"])
+        PlainFrame.from_plain(data=[["1", 2],
+                                    ["1", 2]],
+                              columns=["a", "b"],
+                              dtypes=["float", "int"])
 
     with pytest.raises(TypeError):
-        PlainFrame(data=[["1", 2],
-                         ["1", 2]],
-                   columns=["a", "b"],
-                   dtypes=["str", "str"])
+        PlainFrame.from_plain(data=[["1", 2],
+                                    ["1", 2]],
+                              columns=["a", "b"],
+                              dtypes=["str", "str"])
 
     with pytest.raises(TypeError):
-        PlainFrame(data=[[True, 2],
-                         [False, 2]],
-                   columns=["a", "b"],
-                   dtypes=["datetime", "int"])
+        PlainFrame.from_plain(data=[[True, 2],
+                                    [False, 2]],
+                              columns=["a", "b"],
+                              dtypes=["datetime", "int"])
 
     # correct implementation should not raise
-    PlainFrame(data=[[1, 2],
-                     [1, 2]],
-               columns=["a", "b"],
-               dtypes=["int", "int"])
+    PlainFrame.from_plain(data=[[1, 2],
+                                [1, 2]],
+                          columns=["a", "b"],
+                          dtypes=["int", "int"])
 
 
 def test_assert_equal_basics():
@@ -344,7 +370,7 @@ def test_testdatatable_getitem_subset():
 
 def test_testdatatable_get_column():
     df = create_plain_frame(["col1:str", "col2:int"], 2)
-    assert df.get_column("col1") is df.plaincolumns["col1"]
+    assert df.get_column("col1") is df.plaincolumns[0]
 
 
 def test_testdatatable_parse_typed_columns():
