@@ -162,6 +162,38 @@ def test_plainframe_attributes(plainframe_missings):
     assert col_values("datetime")[0] == datetime.datetime(2019, 1, 1, 10)
 
 
+def test_plainframe_modify():
+    # change single value
+    df_origin = create_plainframe_single([1, 2], "int")
+    df_target = create_plainframe_single([1, 1], "int")
+    assert df_origin.modify({"name": {1: 1}}) == df_target
+
+    # change multiple values
+    df_origin = create_plainframe_single([1, 2], "int")
+    df_target = create_plainframe_single([3, 3], "int")
+    assert df_origin.modify({"name": {0: 3, 1: 3}}) == df_target
+
+    # change multiple columns
+    df_origin = PlainFrame.from_plain(data=[[1, 2], ["a", "b"]],
+                                      dtypes=["int", "str"],
+                                      columns=["int", "str"],
+                                      row_wise=False)
+
+    df_target = PlainFrame.from_plain(data=[[1, 1], ["a", "a"]],
+                                      dtypes=["int", "str"],
+                                      columns=["int", "str"],
+                                      row_wise=False)
+
+    assert df_origin.modify({"int": {1: 1}, "str": {1: "a"}}) == df_target
+
+
+def test_plainframe_modify_assertions():
+    # check incorrect type conversion
+    df = create_plainframe_single([1, 2], "int")
+    with pytest.raises(TypeError):
+        df.modify({"name": {0: "asd"}})
+
+
 def test_plainframe_getitem_subset():
     df = create_plain_frame(["col1:str", "col2:int", "col3:int"], 2)
     df_sub = create_plain_frame(["col1:str", "col2:int"], 2)
@@ -430,6 +462,21 @@ def test_plainframe_from_pandas_inspect_dtype():
     ser = pd.Series("asd", dtype=object)
     with pytest.raises(TypeError):
         inspect(ser)
+
+
+def test_plainframe_from_pandas_inspect_dtype_object():
+    inspect = ConverterFromPandas.inspect_dtype_object
+
+    # ensure string with missings
+    df = pd.DataFrame({"dummy": ["asd", NaN]})
+    conv = ConverterFromPandas(df)
+    assert conv.inspect_dtype_object("dummy") == "str"
+
+    # check incorrect dtype
+    df = pd.DataFrame({"dummy": ["asd", tuple([1, 2])]})
+    conv = ConverterFromPandas(df)
+    with pytest.raises(TypeError):
+        conv.inspect_dtype_object("dummy")
 
 
 def test_plainframe_to_pandas(plainframe_standard):
