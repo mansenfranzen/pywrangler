@@ -674,10 +674,16 @@ class PlainFrame(_ImmutablePlainFrame):
 
         """
 
-        idx = self.columns.index(name)
-        column = self.plaincolumns[idx]
 
-        return column
+        try:
+            idx = self.columns.index(name)
+            column = self.plaincolumns[idx]
+            return column
+        except ValueError:
+            raise ValueError("Column '{}' does not exist. Available columns "
+                             "are: {}"
+                             .format(name, self.columns))
+
 
     def __getitem__(self, subset: Union[str, Sequence[str], slice]) \
             -> 'PlainFrame':
