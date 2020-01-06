@@ -4,14 +4,19 @@
 import collections
 import datetime
 
-import pandas as pd
-import numpy as np
 import pytest
-from pywrangler.util.testing.plainframe import PlainFrame, PlainColumn, \
-    NULL, NaN, \
-    ConverterFromPandas
 
+import numpy as np
+import pandas as pd
 from numpy.testing import assert_equal as np_assert_equal
+
+from pywrangler.util.testing.plainframe import (
+    NULL,
+    ConverterFromPandas,
+    NaN,
+    PlainColumn,
+    PlainFrame
+)
 
 
 @pytest.fixture
@@ -218,6 +223,10 @@ def test_plainframe_getitem_subset():
 def test_plainframe_get_column():
     df = create_plain_frame(["col1:str", "col2:int"], 2)
     assert df.get_column("col1") is df.plaincolumns[0]
+
+    # check value error for non existent column
+    with pytest.raises(ValueError):
+        df.get_column("does_not_exist")
 
 
 def test_plainframe_parse_typed_columns():
