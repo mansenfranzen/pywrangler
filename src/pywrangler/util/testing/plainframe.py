@@ -148,6 +148,13 @@ class PlainColumn(_ImmutablePlainColumn):
 
         """
 
+        # assert valid dtype
+        if self.dtype not in PRIMITIVE_TYPES:
+            raise ValueError("Type '{}' is invalid. Following types are "
+                             "allowed: {}"
+                             .format(self.dtype, PRIMITIVE_TYPES.keys()))
+
+        # assert valid dtypes for values
         allowed_types = PRIMITIVE_TYPES[self.dtype]
 
         for value in self.values:
@@ -204,9 +211,8 @@ class PlainColumn(_ImmutablePlainColumn):
 
 
 _ImmutablePlainFrame = NamedTuple("_ImmutablePlainFrame",
-                                  [("data", Tuple[Tuple]),
-                                   ("columns", Tuple[str]),
-                                   ("dtypes", Tuple[str])])
+                                  [("plaincolumns", Tuple[PlainColumn])]
+                                  )
 
 
 class PlainFrame(_ImmutablePlainFrame):
@@ -239,7 +245,34 @@ class PlainFrame(_ImmutablePlainFrame):
     """
 
     def __init__(self, *args, **kwargs):
-        self._validata_inputs()
+        self._validate_plaincolumns()
+
+    @property
+    def columns(self) -> List[str]:
+        """Return column names of PlainFrame.
+
+        """
+
+        return [column.name for column in self.plaincolumns]
+
+    @property
+    def dtypes(self) -> List[str]:
+        """Return dtypes of columns of PlainFrame.
+
+        """
+
+        return [column.dtype for column in self.plaincolumns]
+
+    @property
+    def data(self) -> List[Tuple]:
+        """Return data of PlainFrame row wise.
+
+        """
+
+        data = [column.values for column in self.plaincolumns]
+        transposed = list(zip(*data))
+
+        return transposed
 
     @property
     def n_rows(self) -> int:
@@ -247,7 +280,7 @@ class PlainFrame(_ImmutablePlainFrame):
 
         """
 
-        return len(self.data)
+        return len(self.plaincolumns[0].values)
 
     @property
     def n_cols(self):
@@ -255,21 +288,7 @@ class PlainFrame(_ImmutablePlainFrame):
 
         """
 
-        return len(self.columns)
-
-    @property
-    @functools.lru_cache()
-    def plaincolumns(self) -> Tuple[PlainColumn]:
-        """Creates a tuple of PlainColumn instances. This is mainly used for
-        column wise access.
-
-        """
-
-        zipped = zip(self.columns, self.dtypes, zip(*self.data))
-        columns = [PlainColumn.from_plain(column, dtype, data)
-                   for column, dtype, data in zipped]
-
-        return tuple(columns)
+        return len(self.plaincolumns)
 
     @property
     def assert_equal(self) -> 'EqualityAsserter':
@@ -295,19 +314,16 @@ class PlainFrame(_ImmutablePlainFrame):
 
         """
 
-        data = []
+        modified = []
 
         for plaincolumn in self.plaincolumns:
             try:
                 modification = modifications[plaincolumn.name]
-                modified = plaincolumn.modify(modification)
-                data.append(modified)
+                modified.append(plaincolumn.modify(modification))
             except KeyError:
-                data.append(plaincolumn.values)
+                modified.append(plaincolumn)
 
-        data = tuple(zip(*data))
-
-        return PlainFrame(data=data, dtypes=self.dtypes, columns=self.columns)
+        return PlainFrame(plaincolumn=modified)
 
     def to_pandas(self) -> pd.DataFrame:
         """Converts test data table into a pandas dataframe.
@@ -337,61 +353,38 @@ class PlainFrame(_ImmutablePlainFrame):
         spark = SparkSession.builder.getOrCreate()
         return spark.createDataFrame(data=data, schema=schema)
 
-    def _validata_inputs(self):
-        """Check input parameter in regard to validity constraints.
+    def _validate_plaincolumns(self):
+        """Check plaincolumns in regard to validity constraints. Raises
+        ValueError in case of invalidity.
 
         """
 
-        # assert tuples for columns, dtypes and data to ensure immutability
-        tpl = ("PlainFrame was instantiated incorrectly. {attribute} needs "
-               "to be a tuple, however {dtype} was encountered. Please use "
-               "`PlainFrame.from_plain` instead for convenient instantiation "
-               "and proper type casts.")
+        # assert tuples for plaincolumns and plaincolumns to be PlainColumn
+        if not isinstance(self.plaincolumns, tuple):
+            raise ValueError("PlainFrame was instantiated incorrectly. "
+                             "`plaincolumns` needs to be of type `tuple`. "
+                             "However, {} was encountered. Please use "
+                             "`PlainFrame.from_plain` instead for convenient "
+                             "instantiation and proper type casts."
+                             .format(type(self.plaincolumns)))
 
-        if not isinstance(self.columns, tuple):
-            raise ValueError(tpl.format(attribute="`columns`",
-                                        dtype=type(self.columns)))
+        not_plaincolumn = [type(column)
+                           for column in self.plaincolumns
+                           if not isinstance(column, PlainColumn)]
 
-        if not isinstance(self.dtypes, tuple):
-            raise ValueError(tpl.format(attribute="`dtypes`",
-                                        dtype=type(self.dtypes)))
+        if not_plaincolumn:
+            raise ValueError("PlainFrame was instantiated incorrectly. "
+                             "Elements of `plaincolumns` needs to be of type "
+                             "`PlainColumn`. However, {} was encountered. "
+                             "Please use `PlainFrame.from_plain` instead for "
+                             "convenient instantiation and proper type casts."
+                             .format(not_plaincolumn))
 
-        if not isinstance(self.data, tuple):
-            raise ValueError(tpl.format(attribute="`data`",
-                                        dtype=type(self.data)))
-
-        for idx, row in enumerate(self.data):
-            if not isinstance(row, tuple):
-                attribute = "Row {} of `data`".format(idx)
-                raise ValueError(tpl.format(attribute=attribute,
-                                            dtype=type(row)))
-
-        # assert equal number of elements across rows
-        row_lenghts = {len(row) for row in self.data}
+        # assert equal number of values per column
+        row_lenghts = {len(column.values) for column in self.plaincolumns}
         if len(row_lenghts) > 1:
             raise ValueError("Input data has varying number of values per "
-                             "row. Please check provided input data")
-
-        # assert equal number of columns and elements per row
-        row_lenghts.add(len(self.columns))
-        if len(row_lenghts) > 1:
-            raise ValueError("Number of columns has to equal the number of "
-                             "values per row. Please check column names and "
-                             "provided input data.")
-
-        # assert equal number of dtypes and elements per row
-        row_lenghts.add(len(self.dtypes))
-        if len(row_lenghts) > 1:
-            raise ValueError("Number of dtypes has to equal the number of "
-                             "values per row. Please check dtypes and "
-                             "provided input data.")
-
-        # assert valid dtypes
-        for dtype in self.dtypes:
-            if dtype not in PRIMITIVE_TYPES:
-                raise ValueError("Type '{}' is invalid. Following types are "
-                                 "allowed: {}"
-                                 .format(dtype, PRIMITIVE_TYPES.keys()))
+                             "column. Please check provided input data.")
 
         # assert unique column names
         duplicates = {x for x in self.columns if self.columns.count(x) > 1}
@@ -400,9 +393,73 @@ class PlainFrame(_ImmutablePlainFrame):
                              "Please use unique column names."
                              .format(duplicates))
 
-        # assert correct types
-        for plaincolumn in self.plaincolumns:
-            plaincolumn._check_dtype()
+    @staticmethod
+    def _validate_from_plain(data: Sequence[Sequence],
+                             columns: Sequence[str],
+                             dtypes: Sequence[str],
+                             row_wise: bool):
+        """Validates input given to `from_plain` factory. Raises value error
+        in case of invalid input.
+
+        Parameters
+        ----------
+        data: list
+            List of iterables representing the input data.
+        columns: list
+            List of strings representing the column names. Typed annotations
+            are allowed to be used here and will be checked of `dtypes` is not
+            provided.
+        dtypes: list, optional
+            List of column types.
+        row_wise: bool, optional
+            By default, assumes `data` is provided in row wise format. All
+            values belonging to the same row are stored in the same array. In
+            contrast, if `row_wise` is False, column wise alignment is assumed.
+            In this case, all values belonging to the same column are stored in
+            the same array.
+
+        """
+
+        if row_wise:
+            # assert equal number of elements across rows
+            row_lenghts = {len(row) for row in data}
+            if len(row_lenghts) > 1:
+                raise ValueError("Input data has varying number of values per "
+                                 "row. Please check provided input data")
+
+            # assert equal number of columns and elements per row
+            row_lenghts.add(len(columns))
+            if len(row_lenghts) > 1:
+                raise ValueError(
+                    "Number of columns has to equal the number of "
+                    "values per row. Please check column names and "
+                    "provided input data.")
+
+            # assert equal number of dtypes and elements per row
+            row_lenghts.add(len(dtypes))
+            if len(row_lenghts) > 1:
+                raise ValueError("Number of dtypes has to equal the number of "
+                                 "values per row. Please check dtypes and "
+                                 "provided input data.")
+
+        else:
+            # assert equal number of elements across columns
+            col_lengths = {len(col) for col in data}
+            if len(col_lengths) > 1:
+                raise ValueError("Input data has varying number of values per "
+                                 "columns. Please check provided input data")
+
+            # assert equal number of columns in data, column names and dtypes
+            col_count = len(columns)
+            if col_count != len(data):
+                raise ValueError("Input data and column names have different "
+                                 "amount of columns. Please check provided "
+                                 "input data")
+
+            if col_count != len(dtypes):
+                raise ValueError("Input data and dtypes have different "
+                                 "amount of columns. Please check provided "
+                                 "input data")
 
     @classmethod
     def from_pandas(cls, df: pd.DataFrame, dtypes: TYPE_DTYPE_INPUT = None) \
@@ -453,7 +510,8 @@ class PlainFrame(_ImmutablePlainFrame):
     def from_plain(cls,
                    data: Sequence[Sequence],
                    columns: Sequence[str],
-                   dtypes: Optional[Sequence[str]] = None):
+                   dtypes: Optional[Sequence[str]] = None,
+                   row_wise: bool = True):
         """Instantiate `PlainFrame` from plain python objects. Dtypes have to
         be provided either via `columns` as typed column annotations or
         directly via `dtypes`. Typed column annotations are a convenient way to
@@ -478,6 +536,12 @@ class PlainFrame(_ImmutablePlainFrame):
             provided.
         dtypes: list, optional
             List of column types.
+        row_wise: bool, optional
+            By default, assumes `data` is provided in row wise format. All
+            values belonging to the same row are stored in the same array. In
+            contrast, if `row_wise` is False, column wise alignment is assumed.
+            In this case, all values belonging to the same column are stored in
+            the same array.
 
         Returns
         -------
@@ -489,11 +553,20 @@ class PlainFrame(_ImmutablePlainFrame):
         if dtypes is None:
             columns, dtypes = cls._parse_typed_columns(columns)
 
-        columns = tuple(columns)
-        dtypes = tuple(dtypes)
-        data = tuple([tuple(row) for row in data])
+        # validate input data
+        cls._validate_from_plain(data=data, columns=columns, dtypes=dtypes,
+                                 row_wise=row_wise)
 
-        return cls(data=data, columns=columns, dtypes=dtypes)
+        # transpose data if row wise
+        if row_wise:
+            data = zip(*data)
+
+        # instantiate PlainColumns
+        zipped = zip(columns, dtypes, data)
+        plaincolumns = [PlainColumn.from_plain(column, dtype, data)
+                        for column, dtype, data in zipped]
+
+        return cls(plaincolumns=tuple(plaincolumns))
 
     @classmethod
     def from_dict(cls, data: 'collections.OrderedDict[str, Sequence]') \
@@ -516,9 +589,8 @@ class PlainFrame(_ImmutablePlainFrame):
         typed_columns, values = zip(*data.items())
         columns, dtypes = cls._parse_typed_columns(typed_columns)
 
-        data = tuple(zip(*values))
-
-        return cls(data=data, columns=columns, dtypes=dtypes)
+        return cls.from_plain(data=values, columns=columns, dtypes=dtypes,
+                              row_wise=False)
 
     def to_dict(self) -> 'collections.OrderedDict[str, tuple]':
         """Converts PlainFrame into dictionary with key as typed columns
@@ -640,19 +712,9 @@ class PlainFrame(_ImmutablePlainFrame):
                              "names are: {}"
                              .format(invalid, self.columns))
 
-        # get dtypes and data
-        dtypes = tuple([self.get_column(column).dtype
-                        for column in columns])
+        plaincolumns = tuple([self.get_column(column) for column in columns])
 
-        columns = tuple(columns)
-
-        data = [self.get_column(column).values
-                for column in columns]
-
-        # transpose data
-        data = tuple((zip(*data)))
-
-        return PlainFrame(data=data, columns=columns, dtypes=dtypes)
+        return PlainFrame(plaincolumns=plaincolumns)
 
     def __repr__(self):
         """Get table as ASCII representation.
