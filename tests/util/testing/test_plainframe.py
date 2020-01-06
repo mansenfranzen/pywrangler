@@ -7,7 +7,8 @@ import datetime
 import pandas as pd
 import numpy as np
 import pytest
-from pywrangler.util.testing.plainframe import PlainFrame, NULL, NaN, \
+from pywrangler.util.testing.plainframe import PlainFrame, PlainColumn, \
+    NULL, NaN, \
     ConverterFromPandas
 
 from numpy.testing import assert_equal as np_assert_equal
@@ -134,44 +135,96 @@ def create_plainframe_single(values, dtype):
     return PlainFrame.from_plain(data=data, dtypes=dtypes, columns=columns)
 
 
-def test_plainframe_init(plainframe_missings):
+def test_plainframe():
+    # incorrect instantiation with non tuples with non factory method
+    plain_column = PlainColumn.from_plain(name="int",
+                                          dtype="int",
+                                          values=[1, 2, 3])
+
+    # correct instantiation
+    PlainFrame(plaincolumns=(plain_column,))
+
+    with pytest.raises(ValueError):
+        PlainFrame(plaincolumns=[plain_column])
+
+    with pytest.raises(ValueError):
+        PlainFrame(plaincolumns=[1])
+
+
+def test_plainframe_attributes(plainframe_missings):
     df = plainframe_missings
     col_values = lambda x: df.get_column(x).values
 
-    assert df.columns == ("int", "float", "bool", "str", "datetime")
-    assert df.dtypes == ("int", "float", "bool", "str", "datetime")
+    assert df.columns == ["int", "float", "bool", "str", "datetime"]
+    assert df.dtypes == ["int", "float", "bool", "str", "datetime"]
     assert col_values("int") == (1, 2, NULL)
     assert col_values("str") == ("string", "string2", NULL)
     assert col_values("datetime")[0] == datetime.datetime(2019, 1, 1, 10)
 
 
-def test_plainframe_init_assertions():
-    # incorrect instantiation with non tuples with non factory method
+def test_plainframe_getitem_subset():
+    df = create_plain_frame(["col1:str", "col2:int", "col3:int"], 2)
+    df_sub = create_plain_frame(["col1:str", "col2:int"], 2)
+
+    cmp_kwargs = dict(assert_column_order=True,
+                      assert_row_order=True)
+
+    # test list of strings, slice and string
+    df["col1", "col2"].assert_equal(df_sub, **cmp_kwargs)
+    df["col1":"col2"].assert_equal(df_sub, **cmp_kwargs)
+    df["col1"].assert_equal(df_sub["col1"], **cmp_kwargs)
+
+    # test incorrect type
     with pytest.raises(ValueError):
-        PlainFrame(data=[(1, 2), ],
-                   columns=("a", "b"),
-                   dtypes=("int", "int"))
+        df[{"col1"}]
 
+    # test invalid column name
     with pytest.raises(ValueError):
-        PlainFrame(data=([1, 2],),
-                   columns=("a", "b"),
-                   dtypes=("int", "int"))
+        df["non_existant"]
 
+
+def test_plainframe_get_column():
+    df = create_plain_frame(["col1:str", "col2:int"], 2)
+    assert df.get_column("col1") is df.plaincolumns[0]
+
+
+def test_plainframe_parse_typed_columns():
+    parse = PlainFrame._parse_typed_columns
+
+    # invalid splits
+    cols = ["col1:int", "col2"]
     with pytest.raises(ValueError):
-        PlainFrame(data=((1, 2),),
-                   columns=["a", "b"],
-                   dtypes=("int", "int"))
+        parse(cols)
 
+    # invalid types
+    cols = ["col1:asd"]
     with pytest.raises(ValueError):
-        PlainFrame(data=((1, 2),),
-                   columns=("a", "b"),
-                   dtypes=["int", "int"])
+        parse(cols)
 
-    # correct instantiation
-    PlainFrame(data=((1, 2),),
-               columns=("a", "b"),
-               dtypes=("int", "int"))
+    # invalid abbreviations
+    cols = ["col1:a"]
+    with pytest.raises(ValueError):
+        parse(cols)
 
+    # correct types and columns
+    cols = ["col1:str", "col2:s",
+            "col3:int", "col4:i",
+            "col5:float", "col6:f",
+            "col7:bool", "col8:b",
+            "col9:datetime", "col10:d"]
+
+    names = ["col{}".format(x) for x in range(1, 11)]
+    dtypes = ["str", "str",
+              "int", "int",
+              "float", "float",
+              "bool", "bool",
+              "datetime", "datetime"]
+
+    result = (names, dtypes)
+    np_assert_equal(parse(cols), result)
+
+
+def test_plainframe_from_plain():
     # unequal elements per row
     with pytest.raises(ValueError):
         PlainFrame.from_plain(data=[[1, 2],
@@ -238,84 +291,7 @@ def test_plainframe_init_assertions():
                           dtypes=["int", "int"])
 
 
-def test_assert_equal_basics():
-    # equal values should be equal
-    left = create_plain_frame(["a:int", "b:int"], 10)
-    right = create_plain_frame(["a:int", "b:int"], 10)
-    left.assert_equal(right)
-
-    # different values should not be equal
-    left = create_plainframe_single([1, 2], "int")
-    right = create_plainframe_single([2, 3], "int")
-    with pytest.raises(AssertionError):
-        left.assert_equal(right)
-
-    # incorrect number of rows
-    with pytest.raises(AssertionError):
-        left = create_plain_frame(["a:int", "b:int"], 10)
-        right = create_plain_frame(["a:int", "b:int"], 5)
-        left.assert_equal(right)
-
-    # incorrect number of columns
-    with pytest.raises(AssertionError):
-        left = create_plain_frame(["a:int"], 10)
-        right = create_plain_frame(["a:int", "b:int"], 10)
-        left.assert_equal(right)
-
-    # incorrect column_names
-    with pytest.raises(AssertionError):
-        left = create_plain_frame(["a:int", "c:int"], 10)
-        right = create_plain_frame(["a:int", "b:int"], 10)
-        left.assert_equal(right)
-
-    # incorrect dtypes
-    with pytest.raises(AssertionError):
-        left = create_plain_frame(["a:int", "b:str"], 10)
-        right = create_plain_frame(["a:int", "b:int"], 10)
-        left.assert_equal(right)
-
-    # check column order
-    left = create_plain_frame(["a:int", "b:int"], 10, reverse_cols=True)
-    right = create_plain_frame(["a:int", "b:int"], 10)
-    left.assert_equal(right, assert_column_order=False)
-
-    with pytest.raises(AssertionError):
-        left.assert_equal(right, assert_column_order=True)
-
-    # check row order
-    left = create_plain_frame(["a:int", "b:int"], 10, reverse_rows=True)
-    right = create_plain_frame(["a:int", "b:int"], 10)
-    left.assert_equal(right, assert_row_order=False)
-
-    with pytest.raises(AssertionError):
-        left.assert_equal(right, assert_row_order=True)
-
-
-def test_assert_equal_special():
-    # nan should be equal
-    left = create_plainframe_single([NaN, 1], "float")
-    right = create_plainframe_single([NaN, 1], "float")
-    left.assert_equal(right)
-
-    # Null should be equal
-    left = create_plainframe_single([NULL, 1], "float")
-    right = create_plainframe_single([NULL, 1], "float")
-    left.assert_equal(right)
-
-    # null should be different from other values
-    with pytest.raises(AssertionError):
-        left = create_plainframe_single(["2019-01-01"], "datetime")
-        right = create_plainframe_single([NULL], "datetime")
-        left.assert_equal(right)
-
-    # nan should be different from other values
-    with pytest.raises(AssertionError):
-        left = create_plainframe_single([1.1], "float")
-        right = create_plainframe_single([NaN], "float")
-        left.assert_equal(right)
-
-
-def test_testdatatable_from_dict():
+def test_plainframe_from_dict():
     data = collections.OrderedDict(
         [("col1:int", [1, 2, 3]),
          ("col2:s", ["a", "b", "c"])]
@@ -332,7 +308,7 @@ def test_testdatatable_from_dict():
     np_assert_equal(df.get_column("col2").values, ("a", "b", "c"))
 
 
-def test_testdatatable_to_dict():
+def test_plainframe_to_dict():
     df = create_plain_frame(["col2:str", "col1:int"], 2)
 
     to_dict = df.to_dict()
@@ -347,78 +323,7 @@ def test_testdatatable_to_dict():
     np_assert_equal(values[1], [1, 2])
 
 
-def test_testdatatable_getitem_subset():
-    df = create_plain_frame(["col1:str", "col2:int", "col3:int"], 2)
-    df_sub = create_plain_frame(["col1:str", "col2:int"], 2)
-
-    cmp_kwargs = dict(assert_column_order=True,
-                      assert_row_order=True)
-
-    # test list of strings, slice and string
-    df["col1", "col2"].assert_equal(df_sub, **cmp_kwargs)
-    df["col1":"col2"].assert_equal(df_sub, **cmp_kwargs)
-    df["col1"].assert_equal(df_sub["col1"], **cmp_kwargs)
-
-    # test incorrect type
-    with pytest.raises(ValueError):
-        df[{"col1"}]
-
-    # test invalid column name
-    with pytest.raises(ValueError):
-        df["non_existant"]
-
-
-def test_testdatatable_get_column():
-    df = create_plain_frame(["col1:str", "col2:int"], 2)
-    assert df.get_column("col1") is df.plaincolumns[0]
-
-
-def test_testdatatable_parse_typed_columns():
-    parse = PlainFrame._parse_typed_columns
-
-    # invalid splits
-    cols = ["col1:int", "col2"]
-    with pytest.raises(ValueError):
-        parse(cols)
-
-    # invalid types
-    cols = ["col1:asd"]
-    with pytest.raises(ValueError):
-        parse(cols)
-
-    # invalid abbreviations
-    cols = ["col1:a"]
-    with pytest.raises(ValueError):
-        parse(cols)
-
-    # correct types and columns
-    cols = ["col1:str", "col2:s",
-            "col3:int", "col4:i",
-            "col5:float", "col6:f",
-            "col7:bool", "col8:b",
-            "col9:datetime", "col10:d"]
-
-    names = ["col{}".format(x) for x in range(1, 11)]
-    dtypes = ["str", "str",
-              "int", "int",
-              "float", "float",
-              "bool", "bool",
-              "datetime", "datetime"]
-
-    result = (names, dtypes)
-    np_assert_equal(parse(cols), result)
-
-
-def test_inspect_dtype_from_pandas():
-    inspect = ConverterFromPandas.inspect_dtype
-
-    # raise if incorret type
-    ser = pd.Series("asd", dtype=object)
-    with pytest.raises(TypeError):
-        inspect(ser)
-
-
-def test_testdatatable_from_pandas(df_from_pandas):
+def test_plainframe_from_pandas(df_from_pandas):
     df = df_from_pandas
     df_conv = PlainFrame.from_pandas(df)
 
@@ -460,7 +365,7 @@ def test_testdatatable_from_pandas(df_from_pandas):
         datetime.datetime(2019, 1, 1), NULL)
 
 
-def test_testdatatable_from_pandas_special():
+def test_plainframe_from_pandas_assertions_missings_cast():
     # check mixed dtype raise
     df = pd.DataFrame({"mixed": [1, "foo bar"]})
     with pytest.raises(TypeError):
@@ -518,7 +423,69 @@ def test_testdatatable_from_pandas_special():
     assert df_conv.get_column("str").values == ("foo", "bar", NULL)
 
 
-def test_testdatatable_from_pyspark(df_from_spark):
+def test_plainframe_from_pandas_inspect_dtype():
+    inspect = ConverterFromPandas.inspect_dtype
+
+    # raise if incorrect type
+    ser = pd.Series("asd", dtype=object)
+    with pytest.raises(TypeError):
+        inspect(ser)
+
+
+def test_plainframe_to_pandas(plainframe_standard):
+    from pandas.api import types
+    df = plainframe_standard.to_pandas()
+
+    assert types.is_integer_dtype(df["int"])
+    assert df["int"][0] == 1
+    assert df["int"].isnull().sum() == 0
+
+    assert types.is_float_dtype(df["float"])
+    assert df["float"].isnull().sum() == 0
+    assert df["float"][1] == 2.0
+
+    assert types.is_bool_dtype(df["bool"])
+    np_assert_equal(df["bool"][0], True)
+    assert df["bool"].isnull().sum() == 0
+
+    assert types.is_object_dtype(df["str"])
+    assert df["str"].isnull().sum() == 0
+    assert df["str"][0] == "string"
+
+    assert types.is_datetime64_dtype(df["datetime"])
+    assert df["datetime"].isnull().sum() == 0
+    assert df["datetime"][0] == pd.Timestamp("2019-01-01 10:00:00")
+
+
+def test_plainframe_to_pandas_missings(plainframe_missings):
+    from pandas.api import types
+
+    df = plainframe_missings.to_pandas()
+
+    assert types.is_float_dtype(df["int"])
+    assert df["int"][0] == 1.0
+    assert pd.isnull(df["int"][2])
+    assert df["int"].isnull().sum() == 1
+
+    assert df["float"].isnull().sum() == 2
+    assert df["float"][0] == 1.1
+    assert pd.isnull(df["float"][2])
+
+    assert types.is_float_dtype(df["bool"])
+    assert df["bool"][0] == 1.0
+    assert df["bool"].isnull().sum() == 1
+
+    assert types.is_object_dtype(df["str"])
+    assert df["str"].isnull().sum() == 1
+    assert df["str"][0] == "string"
+
+    assert types.is_datetime64_dtype(df["datetime"])
+    assert df["datetime"].isnull().sum() == 1
+    assert df["datetime"][0] == pd.Timestamp("2019-01-01 10:00:00")
+    assert df["datetime"][2] is pd.NaT
+
+
+def test_plainframe_from_pyspark(df_from_spark):
     def select(x):
         from_pyspark = PlainFrame.from_pyspark
         return from_pyspark(df_from_spark.select(x))
@@ -564,7 +531,7 @@ def test_testdatatable_from_pyspark(df_from_spark):
             df = select(unsupported_column)
 
 
-def test_spark_converter(plainframe_missings):
+def test_plainframe_to_pyspark(plainframe_missings):
     df = plainframe_missings.to_pyspark()
 
     dtypes = dict(df.dtypes)
@@ -592,54 +559,78 @@ def test_spark_converter(plainframe_missings):
     assert res[2].datetime is None
 
 
-def test_pandas_converter(plainframe_standard):
-    from pandas.api import types
-    df = plainframe_standard.to_pandas()
+def test_plainframe_assert_equal():
+    # equal values should be equal
+    left = create_plain_frame(["a:int", "b:int"], 10)
+    right = create_plain_frame(["a:int", "b:int"], 10)
+    left.assert_equal(right)
 
-    assert types.is_integer_dtype(df["int"])
-    assert df["int"][0] == 1
-    assert df["int"].isnull().sum() == 0
+    # different values should not be equal
+    left = create_plainframe_single([1, 2], "int")
+    right = create_plainframe_single([2, 3], "int")
+    with pytest.raises(AssertionError):
+        left.assert_equal(right)
 
-    assert types.is_float_dtype(df["float"])
-    assert df["float"].isnull().sum() == 0
-    assert df["float"][1] == 2.0
+    # incorrect number of rows
+    with pytest.raises(AssertionError):
+        left = create_plain_frame(["a:int", "b:int"], 10)
+        right = create_plain_frame(["a:int", "b:int"], 5)
+        left.assert_equal(right)
 
-    assert types.is_bool_dtype(df["bool"])
-    np_assert_equal(df["bool"][0], True)
-    assert df["bool"].isnull().sum() == 0
+    # incorrect number of columns
+    with pytest.raises(AssertionError):
+        left = create_plain_frame(["a:int"], 10)
+        right = create_plain_frame(["a:int", "b:int"], 10)
+        left.assert_equal(right)
 
-    assert types.is_object_dtype(df["str"])
-    assert df["str"].isnull().sum() == 0
-    assert df["str"][0] == "string"
+    # incorrect column_names
+    with pytest.raises(AssertionError):
+        left = create_plain_frame(["a:int", "c:int"], 10)
+        right = create_plain_frame(["a:int", "b:int"], 10)
+        left.assert_equal(right)
 
-    assert types.is_datetime64_dtype(df["datetime"])
-    assert df["datetime"].isnull().sum() == 0
-    assert df["datetime"][0] == pd.Timestamp("2019-01-01 10:00:00")
+    # incorrect dtypes
+    with pytest.raises(AssertionError):
+        left = create_plain_frame(["a:int", "b:str"], 10)
+        right = create_plain_frame(["a:int", "b:int"], 10)
+        left.assert_equal(right)
+
+    # check column order
+    left = create_plain_frame(["a:int", "b:int"], 10, reverse_cols=True)
+    right = create_plain_frame(["a:int", "b:int"], 10)
+    left.assert_equal(right, assert_column_order=False)
+
+    with pytest.raises(AssertionError):
+        left.assert_equal(right, assert_column_order=True)
+
+    # check row order
+    left = create_plain_frame(["a:int", "b:int"], 10, reverse_rows=True)
+    right = create_plain_frame(["a:int", "b:int"], 10)
+    left.assert_equal(right, assert_row_order=False)
+
+    with pytest.raises(AssertionError):
+        left.assert_equal(right, assert_row_order=True)
 
 
-def test_pandas_converter_missings(plainframe_missings):
-    from pandas.api import types
+def test_plainframe_assert_equal_missings():
+    # nan should be equal
+    left = create_plainframe_single([NaN, 1], "float")
+    right = create_plainframe_single([NaN, 1], "float")
+    left.assert_equal(right)
 
-    df = plainframe_missings.to_pandas()
+    # Null should be equal
+    left = create_plainframe_single([NULL, 1], "float")
+    right = create_plainframe_single([NULL, 1], "float")
+    left.assert_equal(right)
 
-    assert types.is_float_dtype(df["int"])
-    assert df["int"][0] == 1.0
-    assert pd.isnull(df["int"][2])
-    assert df["int"].isnull().sum() == 1
+    # null should be different from other values
+    with pytest.raises(AssertionError):
+        left = create_plainframe_single(["2019-01-01"], "datetime")
+        right = create_plainframe_single([NULL], "datetime")
+        left.assert_equal(right)
 
-    assert df["float"].isnull().sum() == 2
-    assert df["float"][0] == 1.1
-    assert pd.isnull(df["float"][2])
-
-    assert types.is_float_dtype(df["bool"])
-    assert df["bool"][0] == 1.0
-    assert df["bool"].isnull().sum() == 1
-
-    assert types.is_object_dtype(df["str"])
-    assert df["str"].isnull().sum() == 1
-    assert df["str"][0] == "string"
-
-    assert types.is_datetime64_dtype(df["datetime"])
-    assert df["datetime"].isnull().sum() == 1
-    assert df["datetime"][0] == pd.Timestamp("2019-01-01 10:00:00")
-    assert df["datetime"][2] is pd.NaT
+    # nan should be different from other values
+    with pytest.raises(AssertionError):
+        left = create_plainframe_single([1.1], "float")
+        right = create_plainframe_single([NaN], "float")
+        left.assert_equal(right)
