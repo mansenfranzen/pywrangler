@@ -167,7 +167,19 @@ class PlainColumn(_ImmutablePlainColumn):
                                         allowed_types))
 
     def modify(self, modifications: Dict[int, Any]) -> 'PlainColumn':
-        """Modifies PlainColumn and return new instance.
+        """Modifies PlainColumn and returns new instance. Modification does not
+        change dtype, name or the number of values. One or more values will be
+        modified.
+
+        Parameters
+        ----------
+        modifications: dict
+            Dictionary containing modifications with keys representing row
+            indicies and values representing new values.
+
+        Returns
+        -------
+        modified: PlainColumn
 
         """
 
@@ -175,7 +187,9 @@ class PlainColumn(_ImmutablePlainColumn):
         values = [modifications.get(idx, self.values[idx])
                   for idx in range(n_rows)]
 
-        return PlainColumn(name=self.name, dtype=self.dtype, values=values)
+        return PlainColumn.from_plain(name=self.name,
+                                      dtype=self.dtype,
+                                      values=values)
 
     @classmethod
     def from_plain(cls, name: str, dtype: str, values: Sequence) \
@@ -299,8 +313,9 @@ class PlainFrame(_ImmutablePlainFrame):
         return EqualityAsserter(self)
 
     def modify(self, modifications: Dict[str, Dict[int, Any]]) -> 'PlainFrame':
-        """Change PlainFrame with given modifications and return new instance
-        of it.
+        """Modifies PlainFrame and returns new instance. Modification does not
+        change dtype, name or the number of values of defined columns. One or
+        more values of one or more columns will be modified.
 
         Parameters
         ----------
@@ -323,7 +338,7 @@ class PlainFrame(_ImmutablePlainFrame):
             except KeyError:
                 modified.append(plaincolumn)
 
-        return PlainFrame(plaincolumn=modified)
+        return PlainFrame(plaincolumns=tuple(modified))
 
     def to_pandas(self) -> pd.DataFrame:
         """Converts test data table into a pandas dataframe.
