@@ -1,5 +1,4 @@
 """This module contains tests for pyspark interval identifier.
-
 isort:skip_file
 """
 
@@ -31,7 +30,6 @@ REPARTITION_KWARGS = dict(argnames='repartition',
 @BaseTests.pytest_parametrize
 def test_base(testcase, wrangler, repartition):
     """Tests against all available wranglers and test cases .
-
     Parameters
     ----------
     test_case: function
@@ -40,7 +38,6 @@ def test_base(testcase, wrangler, repartition):
         Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
     repartition: None, int
         Define repartition for input dataframe.
-
     """
 
     # instantiate test case
@@ -59,7 +56,6 @@ def test_base(testcase, wrangler, repartition):
 @IdenticalStartEndTests.pytest_parametrize
 def test_identical_start_end(testcase, wrangler,repartition):
     """Tests against all available wranglers and test cases .
-
     Parameters
     ----------
     test_case: function
@@ -68,7 +64,6 @@ def test_identical_start_end(testcase, wrangler,repartition):
         Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
     repartition: None, int
         Define repartition for input dataframe.
-
     """
 
     # instantiate test case
