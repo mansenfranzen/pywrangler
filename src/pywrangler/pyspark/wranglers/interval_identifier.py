@@ -73,6 +73,58 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # check input
         self.validate_input(df)
 
+        if self._identical_start_end_markers:
+            return self._agg_identical_start_end_markers(df)
+        elif ~self.marker_start_use_first & self.marker_end_use_first:
+            return self._last_start_first_end(df)
+        elif self.marker_start_use_first & ~self.marker_end_use_first:
+            return self._first_start_last_end(df)
+        elif self.marker_start_use_first & self.marker_end_use_first:
+            return self._first_start_first_end(df)
+        else:
+            return self._last_start_last_end(df)
+
+    def _agg_identical_start_end_markers(self, df: DataFrame) -> DataFrame:
+        """Extract interval ids from given dataframe.
+
+            Parameters
+            ----------
+            df: pyspark.sql.Dataframe
+
+            Returns
+            -------
+            result: pyspark.sql.Dataframe
+                Same columns as original dataframe plus the new interval id column.
+
+        """
+
+        # define window specs
+        orderby = util.prepare_orderby(self.order_columns, self.ascending)
+        groupby = self.groupby_columns or []
+
+        w_lag = Window.partitionBy(groupby).orderBy(orderby)
+
+        # get boolean series with start and end markers
+        marker_col = F.col(self.marker_column)
+        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
+
+        ser_id = F.sum(bool_start).over(w_lag)
+        return df.withColumn(self.target_column_name, ser_id)
+
+    def _last_start_first_end(self, df: DataFrame) -> DataFrame:
+        """Extract interval ids from given dataframe.
+
+            Parameters
+            ----------
+            df: pyspark.sql.Dataframe
+
+            Returns
+            -------
+            result: pyspark.sql.Dataframe
+                Same columns as original dataframe plus the new interval id column.
+
+        """
+
         # define window specs
         orderby = util.prepare_orderby(self.order_columns, self.ascending)
         groupby = self.groupby_columns or []
@@ -83,12 +135,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # get boolean series with start and end markers
         marker_col = F.col(self.marker_column)
         bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
-
-        # account for identical start and end markers
-        if self._identical_start_end_markers:
-            ser_id = F.sum(bool_start).over(w_lag)
-            return df.withColumn(self.target_column_name, ser_id)
-
         bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
         bool_start_end = bool_start + bool_end
 
@@ -115,7 +161,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         return df.withColumn(self.target_column_name, ser_id) \
             .withColumn(self.target_column_name, renumerate_adjusted)
 
-    def transform_first_start_first_end(self, df: DataFrame) -> DataFrame:
+    def _first_start_first_end(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
 
         Parameters
@@ -128,9 +174,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
             Same columns as original dataframe plus the new interval id column.
 
         """
-
-        # check input
-        self.validate_input(df)
 
         # define window specs
         orderby = util.prepare_orderby(self.order_columns, self.ascending)
@@ -165,7 +208,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return df.withColumn(self.target_column_name, valid_ids)
 
-    def transform_last_start_last_end(self, df: DataFrame) -> DataFrame:
+    def _last_start_last_end(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
 
                 Parameters
@@ -179,9 +222,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
                 """
 
-        # check input
-        self.validate_input(df)
-
         # define window specs
         orderby_reverse = util.prepare_reverse_orderby(self.order_columns, self.ascending)
         orderby = util.prepare_orderby(self.order_columns, self.ascending)
@@ -190,7 +230,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         w_lag = Window.partitionBy(groupby).orderBy(orderby_reverse)
         w_id = Window.partitionBy(groupby + [self.target_column_name])
 
-        bool_start_end, marker_col = self.marker_bool_start_end()
+        bool_start_end, marker_col = self._marker_bool_start_end()
 
         # ffill marker start
         ffill = F.when(marker_col == self.marker_end, 1) \
@@ -217,7 +257,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return df.withColumn(self.target_column_name, valid_ids).orderBy(orderby)
 
-    def transform_first_start_last_end(self, df: DataFrame) -> DataFrame:
+    def _first_start_last_end(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
 
         Parameters
@@ -230,9 +270,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
             Same columns as original dataframe plus the new interval id column.
 
         """
-
-        # check input
-        self.validate_input(df)
 
         # define window specs
         orderby = util.prepare_orderby(self.order_columns, self.ascending)
