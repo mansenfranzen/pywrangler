@@ -66,6 +66,8 @@ class IntervalIdentifier(BaseWrangler):
                  marker_column: str,
                  marker_start,
                  marker_end: Any = NONEVALUE,
+                 marker_start_use=False,
+                 marker_end_use=True,
                  order_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
                  ascending: TYPE_ASCENDING = None,
@@ -74,6 +76,8 @@ class IntervalIdentifier(BaseWrangler):
         self.marker_column = marker_column
         self.marker_start = marker_start
         self.marker_end = marker_end
+        self.marker_start_use = marker_start_use
+        self.marker_end_use = marker_end_use
         self.order_columns = sanitizer.ensure_iterable(order_columns)
         self.groupby_columns = sanitizer.ensure_iterable(groupby_columns)
         self.ascending = sanitizer.ensure_iterable(ascending)
@@ -98,7 +102,7 @@ class IntervalIdentifier(BaseWrangler):
 
         # set default sort order if None is given
         elif self.order_columns:
-            self.ascending = (True, ) * len(self.order_columns)
+            self.ascending = (True,) * len(self.order_columns)
 
     @property
     def preserves_sample_size(self) -> bool:
