@@ -48,6 +48,14 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
                              "dataframes have no implicit order unlike pandas "
                              "dataframes.")
 
+    def _marker_bool_start_end(self):
+        # get boolean series with start and end markers
+        marker_col = F.col(self.marker_column)
+        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
+        bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
+        bool_start_end = bool_start + bool_end
+        return bool_start_end, marker_col
+
     def transform(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
 
@@ -131,17 +139,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         w_lag = Window.partitionBy(groupby).orderBy(orderby)
         w_id = Window.partitionBy(groupby + [self.target_column_name])
 
-        # get boolean series with start and end markers
-        marker_col = F.col(self.marker_column)
-        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
-
-        # account for identical start and end markers
-        if self._identical_start_end_markers:
-            ser_id = F.sum(bool_start).over(w_lag)
-            return df.withColumn(self.target_column_name, ser_id)
-
-        bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
-        bool_start_end = bool_start + bool_end
+        bool_start_end, marker_col = self._marker_bool_start_end()
 
         # ffill marker start
         ffill = F.when(marker_col == self.marker_start, 1) \
@@ -151,7 +149,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         ffill_col = F.last(ffill, ignorenulls=True).over(w_lag.rowsBetween(-sys.maxsize, 0))
         # shift
         shift_col = F.lag(ffill_col, default=0, count=1).over(w_lag).cast("integer")
-        # compare ffill and ffill_shift col if equal set to 0
+        # compare ffill and ffill_shift col, if equal set to 0
         end_marker_null_col = F.when(shift_col == ffill_col, 0).otherwise(ffill_col)
         # negate shift_col
         shift_col_negated = F.when(shift_col == 0, 1).otherwise(0)
@@ -192,17 +190,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         w_lag = Window.partitionBy(groupby).orderBy(orderby_reverse)
         w_id = Window.partitionBy(groupby + [self.target_column_name])
 
-        # get boolean series with start and end markers
-        marker_col = F.col(self.marker_column)
-        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
-
-        # account for identical start and end markers
-        if self._identical_start_end_markers:
-            ser_id = F.sum(bool_start).over(w_lag)
-            return df.withColumn(self.target_column_name, ser_id)
-
-        bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
-        bool_start_end = bool_start + bool_end
+        bool_start_end, marker_col = self.marker_bool_start_end()
 
         # ffill marker start
         ffill = F.when(marker_col == self.marker_end, 1) \
@@ -256,12 +244,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # get boolean series with start and end markers
         marker_col = F.col(self.marker_column)
 
-        # account for identical start and end markers
-        # if self._identical_start_end_markers:
-        #   ser_id = F.sum(bool_start).over(w_lag)
-        #   return df.withColumn(self.target_column_name, ser_id)
-
-        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
         start_ende = F.when(marker_col == self.marker_start, 1) \
             .when(marker_col == self.marker_end, 0) \
             .otherwise(None)
