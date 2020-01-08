@@ -37,15 +37,36 @@ class BaseMutant:
     """
 
     def generate_mutations(self, df: PlainFrame) -> List[Mutation]:
-        """Returns all mutations produced by a mutant given a plainframe. Needs
-        to be implemented by every Mutant.
+        """Returns all mutations produced by a mutant given a PlainFrame. Needs
+        to be implemented by every Mutant. This is essentially the core of
+        every mutant.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+
+        Returns
+        -------
+        mutations: list
+            List of Mutation instances.
 
         """
 
         raise NotImplementedError
 
     def mutate(self, df: PlainFrame) -> PlainFrame:
-        """Modifies given plainframe with inherent mutations.
+        """Modifies given PlainFrame with inherent mutations and returns new,
+        modifed PlainFrame.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to be modified.
+
+        Returns
+        -------
+        modified: PlainFrame
 
         """
 
@@ -105,15 +126,39 @@ class BaseMutant:
 class ValueMutant(BaseMutant):
     """Represents a Mutant with a single mutation.
 
+    Attributes
+    ----------
+    column: str
+        Name of the column.
+    row: int
+        Index of the row.
+    value: Any
+        The new value to be used.
+
     """
 
-    def __init__(self, column: str, row: int, value):
+    def __init__(self, column: str, row: int, value: Any):
         self.column = column
         self.row = row
         self.value = value
 
     def generate_mutations(self, df: PlainFrame) -> List[Mutation]:
+        """Returns a single mutation.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+
+        Returns
+        -------
+        mutations: list
+            List of Mutation instances.
+
+        """
+
         mutation = Mutation(column=self.column, row=self.row, value=self.value)
+
         return [mutation]
 
 
@@ -121,18 +166,51 @@ class FunctionMutant(BaseMutant):
     """Represents a Mutant which wraps a function that essentially generates
     mutations.
 
+    Attributes
+    ----------
+    func: callable
+        A function to be used as a mutation generation method.
+
     """
 
     def __init__(self, func: Callable):
         self.func = func
 
     def generate_mutations(self, df: PlainFrame) -> List[Mutation]:
+        """Delegates the mutation generation to a custom function to allow
+        all possible mutation generation.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+
+        Returns
+        -------
+        mutations: list
+            List of Mutation instances.
+
+        """
+
         return self.func(df)
 
 
 class RandomMutant(BaseMutant):
     """Creates random mutations with naive values for supported dtypes of
-    PlainFrame.
+    PlainFrame. Randomness is controlled via an explicit seed to allow
+    reproducibility. Mutation generation may be narrowed to given rows or
+    columns. The number of distinct mutations may also be specified.
+
+    Attributes
+    ----------
+    count: int, optional
+        The number of mutations to be executed.
+    columns: sequence, optional
+        Restrict mutations to provided columns, if given.
+    rows: sequence, optional
+        Restrict mutations to provided rows, if given.
+    seed: int, optional
+        Set the seed for the random generator.
 
     """
 
@@ -144,19 +222,27 @@ class RandomMutant(BaseMutant):
         self.seed = seed
 
     def generate_mutations(self, df: PlainFrame) -> List[Mutation]:
+        """Generates population of all possible mutations and draws a sample of
+        it.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+
+        Returns
+        -------
+        mutations: list
+            List of Mutation instances.
+
+        """
 
         # set random seed
         random.seed(self.seed)
 
         # validate columns and rows
-        columns = self.columns or df.columns
-        rows = self.rows or range(df.n_rows)
-        valid_rows = range(df.n_rows)
-        invalid_rows = set(rows).difference(valid_rows)
-        if invalid_rows:
-            raise ValueError("RandomMutant: Invalid rows provided: {}. "
-                             "Valid rows are: {}"
-                             .format(invalid_rows, valid_rows))
+        columns = self._get_validated_columns(df)
+        rows = self._get_validated_rows(df)
 
         # validate max count of mutations
         max_count = len(columns) * len(rows)
@@ -171,8 +257,21 @@ class RandomMutant(BaseMutant):
 
     def generate_mutation(self, df: PlainFrame, column: str,
                           row: int) -> Mutation:
-        """Generates mutation from given PlainFrame and single candidate. A
-        candidate is specified as a tuple of column name and row index.
+        """Generates single mutation from given PlainFrame for a given
+        candidate. A candidate is specified via column name and row index.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+        column: str
+            Identifies relevant column of mutation.
+        row: int
+            Identifies relevant row of mutation.
+
+        Returns
+        -------
+        mutation: Mutation
 
         """
 
@@ -182,8 +281,21 @@ class RandomMutant(BaseMutant):
 
         return Mutation(column=column, row=row, value=new_value)
 
-    def _random_value(self, dtype: str, value: Any) -> Any:
-        """Helper function to generate a random value.
+    def _random_value(self, dtype: str, original_value: Any) -> Any:
+        """Helper function to generate a random value given original value
+        and dtype.
+
+        Parameters
+        ----------
+        dtype: str
+            Defines the dtype of the new value.
+        original_value: Any
+            Represents original value
+
+        Returns
+        -------
+        new_value: Any
+            Generated new random value.
 
         """
 
@@ -210,21 +322,92 @@ class RandomMutant(BaseMutant):
                 "datetime": _datetime}[dtype]
 
         candidate = func()
-        while candidate == value:
-            candidate = func
+        while candidate == original_value:
+            candidate = func()
 
         return candidate
+
+    def _get_validated_rows(self, df: PlainFrame) -> List[int]:
+        """Provide validated rows. Provided rows which are not present in given
+        PlainFrame will raise a ValueError.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+
+        Returns
+        -------
+        rows: list
+            List of validated rows (integers)
+
+        """
+
+        rows = self.rows or list(range(df.n_rows))
+
+        valid_rows = range(df.n_rows)
+        invalid_rows = set(rows).difference(valid_rows)
+        if invalid_rows:
+            raise ValueError("RandomMutant: Invalid rows provided: {}. "
+                             "Valid rows are: {}"
+                             .format(invalid_rows, valid_rows))
+
+        return rows
+
+    def _get_validated_columns(self, df: PlainFrame) -> List[str]:
+        """Provide validated columns. Provided columns which are not present in
+        given PlainFrame will raise a ValueError.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+
+        Returns
+        -------
+        rows: list
+            List of validated columns (strings).
+
+        """
+
+        columns = self.columns or df.columns
+        invalid_columns = set(columns).difference(df.columns)
+        if invalid_columns:
+            raise ValueError("RandomMutant: Invalid columns provided: {}. "
+                             "Valid columns are: {}"
+                             .format(invalid_columns, df.columns))
+
+        return columns
 
 
 class MutantCollection(BaseMutant):
     """Represents a collection of multiple Mutant instances.
 
+    Attributes
+    ----------
+    mutants: sequence
+        List of mutants.
+
     """
 
-    def __init__(self, mutants: Iterable):
+    def __init__(self, mutants: Sequence):
         self.mutants = mutants
 
     def generate_mutations(self, df: PlainFrame) -> List[Mutation]:
+        """Collects all mutations generated by included Mutants.
+
+        Parameters
+        ----------
+        df: PlainFrame
+            PlainFrame to generate mutations from.
+
+        Returns
+        -------
+        mutations: list
+            List of Mutation instances.
+
+        """
+
         mutations = [mutant.generate_mutations(df) for mutant in self.mutants]
 
         return list(itertools.chain.from_iterable(mutations))
