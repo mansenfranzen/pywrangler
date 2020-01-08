@@ -3,7 +3,7 @@ pyspark wranglers.
 
 """
 
-from typing import Iterable, Union
+from typing import Iterable, Union, Optional
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
@@ -40,7 +40,7 @@ def validate_columns(df: DataFrame, columns: TYPE_COLUMNS):
 
 
 def prepare_orderby(order_columns: TYPE_COLUMNS,
-                    ascending: TYPE_ASCENDING, reverse: False) -> TYPE_OPT_COLUMN:
+                    ascending: TYPE_ASCENDING, reverse: bool = False) -> TYPE_OPT_COLUMN:
     """Convenient function to return orderby columns in correct
     ascending/descending order.
 
@@ -50,8 +50,9 @@ def prepare_orderby(order_columns: TYPE_COLUMNS,
         return []
 
     zipped = zip(order_columns, ascending)
-    if reverse:
-        return [column if not ascending else F.desc(column)
-                for column, ascending in zipped]
-    return [column if ascending else F.desc(column)
-            for column, ascending in zipped]
+
+    def boolify(sort_ascending: Optional[bool]) -> bool:
+        return bool(sort_ascending) != reverse
+
+    return [column if boolify(sort_ascending) else F.desc(column)
+            for column, sort_ascending in zipped]
