@@ -22,7 +22,7 @@ class Mutation(ImmutableMutation):
 
     The column is always given via label (string). The row is always given via
     an index (integer) because plainframe does not have labeled indices. The
-    new value may be of any type.
+    row index starts with 0. The new value may be of any type.
 
     """
 
@@ -109,7 +109,7 @@ class BaseMutant:
             return column in df.columns
 
         def has_row(row: int) -> bool:
-            return row <= df.n_rows
+            return row <= df.n_rows-1
 
         for mutation in mutations:
             if not has_column(mutation.column):
@@ -281,7 +281,8 @@ class RandomMutant(BaseMutant):
 
         return Mutation(column=column, row=row, value=new_value)
 
-    def _random_value(self, dtype: str, original_value: Any) -> Any:
+    @staticmethod
+    def _random_value(dtype: str, original_value: Any) -> Any:
         """Helper function to generate a random value given original value
         and dtype.
 
