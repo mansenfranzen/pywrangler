@@ -23,14 +23,12 @@ WRANGLER_KWARGS = dict(argnames='wrangler',
 @BaseTests.pytest_parametrize
 def test_base(testcase, wrangler):
     """Tests against all available wranglers and test cases .
-
     Parameters
     ----------
     test_case: function
         Generates test data for given test case.
     wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
         Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
-
     """
 
     # instantiate test case
@@ -49,14 +47,12 @@ def test_base(testcase, wrangler):
 @IdenticalStartEndTests.pytest_parametrize
 def test_identical_start_end(testcase, wrangler):
     """Tests against all available wranglers and test cases .
-
     Parameters
     ----------
     test_case: function
         Generates test data for given test case.
     wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
         Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
-
     """
 
     # instantiate test case
