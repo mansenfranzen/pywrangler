@@ -14,6 +14,8 @@ def ii_kwargs():
     return {"marker_column": "marker_col",
             "marker_start": "start",
             "marker_end": "end",
+            "marker_start_use_first": False,
+            "marker_end_use_first": True,
             "order_columns": ["col1", "col2"],
             "groupby_columns": ["col3", "col4"],
             "ascending": [True, False],
