@@ -29,11 +29,8 @@ class IntervalIdentifier(BaseWrangler):
     by definition (if start and end marker are identical, there are only
     invalid values possible before the first start marker is encountered).
 
-    Only the shortest valid interval is identified. Given multiple opening
-    markers in sequence without an intermittent closing marker, only the last
-    opening marker is relevant and the rest is ignored. Given multiple
-    closing markers in sequence without an intermittent opening marker, only
-    the first closing marker is relevant and the rest is ignored.
+    Multiple Intervals can be selected by using the following params:
+    marker_start_use_first and marker_end_use_first.
 
     Opening and closing markers are included in their corresponding interval.
 
@@ -46,6 +43,12 @@ class IntervalIdentifier(BaseWrangler):
     marker_end: Any, optional
         A value defining the end of an interval. This value is optional. If not
         given, the end marker equals the start marker.
+    marker_start_use_first: bool
+        Identifies if the first occurring `marker_start` of an interval is used.
+        Otherwise the last occurring `marker_start` is used. Default is False.
+    marker_end_use_first: bool
+        Identifies if the first occurring `marker_end` of an interval is used.
+        Otherwise the last occurring `marker_end` is used. Default is True.
     order_columns: str, Iterable[str], optional
         Column names which define the order of the data (e.g. a timestamp
         column). Sort order can be defined with the parameter `ascending`.
@@ -102,7 +105,7 @@ class IntervalIdentifier(BaseWrangler):
 
         # set default sort order if None is given
         elif self.order_columns:
-            self.ascending = (True,) * len(self.order_columns)
+            self.ascending = tuple([True] * len(self.order_columns))
 
     @property
     def preserves_sample_size(self) -> bool:
