@@ -20,9 +20,15 @@ def ii_kwargs():
             "target_column_name": "abc"}
 
 
+@pytest.fixture()
+def concrete_wrangler():
+
+    return concretize_abstract_wrangler(wranglers.IntervalIdentifier)
+
+
 def test_base_interval_identifier_init(ii_kwargs):
 
-    wrangler = concretize_abstract_wrangler(wranglers.IntervalIdentifier)
+    wrangler = concrete_wrangler()
     bii = wrangler(**ii_kwargs)
 
     assert bii.get_params() == ii_kwargs
@@ -33,7 +39,7 @@ def test_base_interval_identifier_sort_length_exc(ii_kwargs):
     incorrect_length = ii_kwargs.copy()
     incorrect_length["ascending"] = (True, )
 
-    wrangler = concretize_abstract_wrangler(wranglers.IntervalIdentifier)
+    wrangler = concrete_wrangler()
 
     with pytest.raises(ValueError):
         wrangler(**incorrect_length)
@@ -44,7 +50,35 @@ def test_base_interval_identifier_sort_keyword_exc(ii_kwargs):
     incorrect_keyword = ii_kwargs.copy()
     incorrect_keyword["ascending"] = ("wrong keyword", "wrong keyword too")
 
-    wrangler = concretize_abstract_wrangler(wranglers.IntervalIdentifier)
+    wrangler = concrete_wrangler()
 
     with pytest.raises(ValueError):
         wrangler(**incorrect_keyword)
+
+
+def test_base_interval_identifier_identical_markers(ii_kwargs):
+
+    kwargs = ii_kwargs.copy()
+    del kwargs["marker_end"]
+
+    wrangler = concrete_wrangler(kwargs)
+
+    assert wrangler._identical_start_end_markers is True
+
+
+def test_base_interval_identifier_identical_start_end_markers(ii_kwargs):
+
+    kwargs = ii_kwargs.copy()
+    kwargs["marker_end"] = kwargs["marker_start"]
+
+    wrangler = concrete_wrangler(kwargs)
+
+    assert wrangler._identical_start_end_markers is True
+
+
+def test_base_interval_identifier_non_identical_markers(ii_kwargs):
+
+    kwargs = ii_kwargs.copy()
+    wrangler = concrete_wrangler(kwargs)
+
+    assert wrangler._identical_start_end_markers is False
