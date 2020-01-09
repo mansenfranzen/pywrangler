@@ -32,8 +32,7 @@ def test_engine_tester_pandas():
         return df["col1"].add(add).mul(mul).to_frame("col2")
 
     Dummy("pandas").test(test_func,
-                         args=(1,),
-                         kwargs={"mul": 1},
+                         test_kwargs={"mul": 1, "add": 1},
                          merge_input=True)
 
 def test_engine_tester_pyspark():

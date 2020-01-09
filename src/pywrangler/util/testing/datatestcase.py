@@ -24,9 +24,9 @@ class EngineTester:
     def __init__(self, parent: 'DataTestCase'):
         self.parent = parent
 
-    def __call__(self, test_func: Callable, args: Optional[Iterable] = None,
-                 kwargs: Optional[Dict[str, Any]] = None,
-                 engine: Optional[str] = None, **test_kwargs):
+    def __call__(self, test_func: Callable,
+                 test_kwargs: Optional[Dict[str, Any]] = None,
+                 engine: Optional[str] = None, **kwargs):
         """Assert test data input/output equality for a given test function.
         Input data is passed to the test function and the result is compared
         to output data. Chooses computation engine as specified by parent or
@@ -37,11 +37,9 @@ class EngineTester:
         test_func: callable
             A function that takes a pandas dataframe as the first keyword
             argument.
-        test_args: iterable, optional
-            Positional arguments which will be passed to `test_func`.
         test_kwargs: dict, optional
             Keyword arguments which will be passed to `test_func`.
-        test_kwargs: dict, optional
+        kwargs: dict, optional
             Any computation specific keyword arguments (like `repartition` for
             pyspark).
         engine: str, optional
@@ -68,9 +66,9 @@ class EngineTester:
                              "engines are: {}."
                              .format(engine, engines.keys()))
 
-        asserter(test_func, test_args=args, test_kwargs=kwargs, **test_kwargs)
+        asserter(test_func, test_kwargs=test_kwargs, **kwargs)
 
-    def pandas(self, test_func: Callable, test_args: Optional[Iterable] = None,
+    def pandas(self, test_func: Callable,
                test_kwargs: Optional[Dict[str, Any]] = None,
                merge_input: Optional[bool] = False):
         """Assert test data input/output equality for a given test function.
@@ -96,8 +94,6 @@ class EngineTester:
         test_func: callable
             A function that takes a pandas dataframe as the first keyword
             argument.
-        test_args: iterable, optional
-            Positional arguments which will be passed to `test_func`.
         test_kwargs: dict, optional
             Keyword arguments which will be passed to `test_func`.
         merge_input: bool, optional
@@ -113,7 +109,6 @@ class EngineTester:
         output_func = partial(self._pandas_output, merge_input=merge_input)
 
         return self.generic_assert(test_func=test_func,
-                                   test_args=test_args,
                                    test_kwargs=test_kwargs,
                                    output_func=output_func)
 
@@ -149,12 +144,10 @@ class EngineTester:
         output_func = partial(self._pyspark_output, repartition=repartition)
 
         return self.generic_assert(test_func=test_func,
-                                   test_args=test_args,
                                    test_kwargs=test_kwargs,
                                    output_func=output_func)
 
     def generic_assert(self, test_func: Callable,
-                       test_args: Optional[Iterable],
                        test_kwargs: Optional[Dict[str, Any]],
                        output_func: Callable):
         """Generic assertion function for all computation engines which
@@ -165,8 +158,6 @@ class EngineTester:
         test_func: callable
             A function that takes a pandas dataframe as the first keyword
             argument.
-        test_args: iterable, optional
-            Positional arguments which will be passed to `test_func`.
         test_kwargs: dict, optional
             Keyword arguments which will be passed to `test_func`.
         output_func: callable
@@ -174,9 +165,8 @@ class EngineTester:
 
         """
 
-        test_args = test_args or ()
         test_kwargs = test_kwargs or {}
-        test_func = partial(test_func, *test_args, **test_kwargs)
+        test_func = partial(test_func, **test_kwargs)
 
         pf_input = self.parent.input
         pf_output = self.parent.output
