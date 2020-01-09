@@ -2,10 +2,11 @@
 
 """
 import operator
-import sys
+from typing import NamedTuple
 
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
+from pyspark.sql import Column
 
 from pywrangler.pyspark import util
 from pywrangler.pyspark.base import PySparkSingleNoFit
@@ -66,6 +67,54 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         valid_ids = F.when(bool_valid, raw_iids).otherwise(0)
         return bool_valid, valid_ids
 
+    def _prepare_iids(self, marker_col, w_lag, start_first, add_negate_shift_col):
+
+        # generate forward fill depending on interval
+        if start_first:
+            default = 0
+            forward_fill = F.when(marker_col == self.marker_start, 1) \
+                .when(marker_col == self.marker_end, 0) \
+                .otherwise(None)
+        else:
+            default = 1
+            forward_fill = F.when(marker_col == self.marker_end, 1) \
+                .when(marker_col == self.marker_start, 0) \
+                .otherwise(None)
+
+        window = w_lag.rowsBetween(Window.unboundedPreceding, 0)
+        forward_fill_col = F.last(forward_fill, ignorenulls=True).over(window)
+
+        # shifting marker_col forward
+        shift_col = F.lag(forward_fill_col, default=default, count=1) \
+            .over(w_lag) \
+            .cast("integer")
+
+        # compare forward fill col and shifted forward fill col, if equal set to 0
+        end_marker_null_col = F.when(shift_col == forward_fill_col, 0) \
+            .otherwise(forward_fill_col)
+
+        if add_negate_shift_col:
+            # negate shift_col
+            shift_col_negated = F.when(shift_col == 0, 1).otherwise(0)
+            add_col = end_marker_null_col + shift_col_negated
+        else:
+            add_col = end_marker_null_col
+
+        # build cum sum over window
+        nt = NamedTuple("iids_ffill", [("raw_iids", Column), ("forward_fill_col", Column)])
+        return nt(F.sum(add_col).over(w_lag), forward_fill_col)
+
+    def _continuous_renumeration(self, bool_valid, valid_ids, w_lag):
+
+        # re-numerate ids from 1 to x and fill invalid with 0
+        valid_ids_shift = F.lag(valid_ids, default=0).over(w_lag)
+        valid_ids_diff = valid_ids_shift - valid_ids
+        valid_ids_increase = (valid_ids_diff < 0).cast("integer")
+
+        renumerate = F.sum(valid_ids_increase).over(w_lag)
+        renumerate_adjusted = F.when(bool_valid, renumerate).otherwise(0)
+        return renumerate_adjusted
+
     def transform(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
 
@@ -122,7 +171,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         return df.withColumn(self.target_column_name, raw_iids)
 
     def _last_start_first_end(self, df: DataFrame) -> DataFrame:
-        """Extract interval ids from given dataframe.
+        """Extract shortest intervals from given dataframe as ids.
 
             Parameters
             ----------
@@ -158,13 +207,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # separate valid vs invalid: ids with start AND end marker are valid
         bool_valid, valid_ids = self._identify_valids(bool_start_end, raw_iids, w_id, operator.eq)
 
-        # re-numerate ids from 1 to x and fill invalid with 0
-        valid_ids_shift = F.lag(valid_ids, default=0).over(w_lag)
-        valid_ids_diff = valid_ids_shift - valid_ids
-        valid_ids_increase = (valid_ids_diff < 0).cast("integer")
-
-        renumerate = F.sum(valid_ids_increase).over(w_lag)
-        renumerate_adjusted = F.when(bool_valid, renumerate).otherwise(0)
+        renumerate_adjusted = self._continuous_renumeration(bool_valid, valid_ids, w_lag)
 
         # raw_iids needs be created temporarily for renumerate_adjusted
         return df.withColumn(self.target_column_name, raw_iids) \
@@ -193,31 +236,21 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         bool_start_end, marker_col = self._marker_bool_start_end()
 
-        # ffill marker start
-        ffill = F.when(marker_col == self.marker_start, 1) \
-            .when(marker_col == self.marker_end, 0) \
-            .otherwise(None)
-
-        ffill_col = F.last(ffill, ignorenulls=True).over(w_lag.rowsBetween(Window.unboundedPreceding, 0))
-        # shift
-        shift_col = F.lag(ffill_col, default=0, count=1).over(w_lag).cast("integer")
-        # compare ffill and ffill_shift col, if equal set to 0
-        end_marker_null_col = F.when(shift_col == ffill_col, 0).otherwise(ffill_col)
-        # negate shift_col
-        shift_col_negated = F.when(shift_col == 0, 1).otherwise(0)
-        # add
-        add_col = end_marker_null_col + shift_col_negated
-        # cumsum
-        raw_iids = F.sum(add_col).over(w_lag)
-        df = df.withColumn(self.target_column_name, raw_iids)
+        raw_ffill = self._prepare_iids(marker_col, w_lag,
+                                       start_first=True,
+                                       add_negate_shift_col=True)
+        df = df.withColumn(self.target_column_name, raw_ffill.raw_iids)
 
         # separate valid vs invalid: ids with start AND end marker are valid
-        bool_valid, valid_ids = self._identify_valids(bool_start_end, raw_iids, w_id, operator.ge)
+        bool_valid, valid_ids = self._identify_valids(bool_start_end, raw_ffill.raw_iids, w_id, operator.ge)
 
-        return df.withColumn(self.target_column_name, valid_ids)
+        renumerate_adjusted = self._continuous_renumeration(bool_valid, valid_ids, w_lag)
+
+        return df.withColumn(self.target_column_name, renumerate_adjusted)
 
     def _last_start_last_end(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
+        The ids are in continuously decreasing order. Invalid ids are 0.
 
         Parameters
         ----------
@@ -239,32 +272,22 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         bool_start_end, marker_col = self._marker_bool_start_end()
 
-        # ffill marker start
-        ffill = F.when(marker_col == self.marker_end, 1) \
-            .when(marker_col == self.marker_start, 0) \
-            .otherwise(None)
-
-        ffill_col = F.last(ffill, ignorenulls=True).over(w_lag.rowsBetween(Window.unboundedPreceding, 0))
-        # shift, default = 1
-        shift_col = F.lag(ffill_col, default=1, count=1).over(w_lag).cast("integer")
-        # compare ffill and ffill_shift col if equal set to 0
-        end_marker_null_col = F.when(shift_col == ffill_col, 0).otherwise(ffill_col)
-        # negate shift_col
-        shift_col_negated = F.when(shift_col == 0, 1).otherwise(0)
-        # add
-        add_col = end_marker_null_col + shift_col_negated
-        # cumsum
-        raw_iids = F.sum(add_col).over(w_lag)
-        raw_iids = raw_iids + 1
+        raw_fill = self._prepare_iids(marker_col, w_lag,
+                                      start_first=False,
+                                      add_negate_shift_col=True)
+        raw_iids = raw_fill.raw_iids + 1
         df = df.withColumn(self.target_column_name, raw_iids)
 
         # separate valid vs invalid: ids with start AND end marker are valid
         bool_valid, valid_ids = self._identify_valids(bool_start_end, raw_iids, w_id, operator.ge)
 
-        return df.withColumn(self.target_column_name, valid_ids)
+        renumerate_adjusted = self._continuous_renumeration(bool_valid, valid_ids, w_lag)
+
+        return df.withColumn(self.target_column_name, renumerate_adjusted)
 
     def _first_start_last_end(self, df: DataFrame) -> DataFrame:
-        """Extract interval ids from given dataframe.
+        """Extract longest intervals from given dataframe as ids.
+        The ids are in continuously increasing order. Invalid ids are 0.
 
         Parameters
         ----------
@@ -287,26 +310,15 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # get boolean series with start and end markers
         marker_col = F.col(self.marker_column)
 
-        start_ende = F.when(marker_col == self.marker_start, 1) \
-            .when(marker_col == self.marker_end, 0) \
-            .otherwise(None)
-        ffill = F.last(start_ende, ignorenulls=True) \
-            .over(w_lag.rowsBetween(Window.unboundedPreceding, 0))
-        ffill_shift = F.lag(ffill, default=0, count=1) \
-            .over(w_lag) \
-            .cast("integer")
-
-        start_and_fill_shift = F.when(ffill == ffill_shift, 0) \
-            .otherwise(ffill)
-
-        cum_sum = F.sum(start_and_fill_shift) \
-            .over(w_lag)
-        df = df.withColumn(self.target_column_name, cum_sum)
+        raw_fill = self._prepare_iids(marker_col, w_lag,
+                                      start_first=True,
+                                      add_negate_shift_col=False)
+        df = df.withColumn(self.target_column_name, raw_fill.raw_iids)
 
         # delete noise in groups
         cols = [self.marker_start, self.marker_end]
-        condition = ~marker_col.isin(cols) & (ffill == 0)
-        raw_iids = F.when(~condition, cum_sum)
+        condition = ~marker_col.isin(cols) & (raw_fill.forward_fill_col == 0)
+        raw_iids = F.when(~condition, raw_fill.raw_iids)
 
         # backwards fill
         window = w_id.orderBy(orderby).rowsBetween(0, Window.unboundedFollowing)
@@ -315,5 +327,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         # fill zeros and cum sum
         condition = F.isnull(self.target_column_name)
-        fill = F.when(condition, 0).otherwise(cum_sum)
+        fill = F.when(condition, 0).otherwise(raw_iids)
+
         return df.withColumn(self.target_column_name, fill)
