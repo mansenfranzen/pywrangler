@@ -29,8 +29,14 @@ class IntervalIdentifier(BaseWrangler):
     by definition (if start and end marker are identical, there are only
     invalid values possible before the first start marker is encountered).
 
-    Multiple Intervals can be selected by using the following params:
-    marker_start_use_first and marker_end_use_first.
+    Four Intervals can be selected by using the following params:
+    `marker_start_use_first` and `marker_end_use_first`. The resulting
+    intervals are:
+        - identical start and end markers
+        - first start / first end
+        - first start / last end (longest interval)
+        - last start / first end (shortest interval)
+        - last start / last end
 
     Opening and closing markers are included in their corresponding interval.
 
