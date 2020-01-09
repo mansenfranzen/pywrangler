@@ -8,6 +8,7 @@ from typing import Any, List, NamedTuple, Sequence, Callable, Tuple, Iterable
 import random
 from string import ascii_letters
 
+from pywrangler.util.helper import get_param_names
 from pywrangler.util.testing.plainframe import PlainFrame
 
 ImmutableMutation = NamedTuple("ImmutableMutation", [("column", str),
@@ -79,6 +80,18 @@ class BaseMutant:
             modifications[mutation.column][mutation.row] = mutation.value
 
         return df.modify(modifications)
+
+    def __repr__(self):
+        """Provide simple string representation for readability.
+
+         """
+
+        param_names = get_param_names(self.__class__.__init__, ["self"])
+        param_dict = {x: getattr(self, x) for x in param_names}
+        repr_dict = ", ".join(["{}={}".format(key, value)
+                               for key, value in param_dict.items()])
+
+        return "{}({})".format(self.__class__.__name__, repr_dict)
 
     @staticmethod
     def _check_duplicated_mutations(mutations: Sequence[Mutation]):
