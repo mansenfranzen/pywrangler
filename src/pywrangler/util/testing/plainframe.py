@@ -674,7 +674,6 @@ class PlainFrame(_ImmutablePlainFrame):
 
         """
 
-
         try:
             idx = self.columns.index(name)
             column = self.plaincolumns[idx]
@@ -683,7 +682,6 @@ class PlainFrame(_ImmutablePlainFrame):
             raise ValueError("Column '{}' does not exist. Available columns "
                              "are: {}"
                              .format(name, self.columns))
-
 
     def __getitem__(self, subset: Union[str, Sequence[str], slice]) \
             -> 'PlainFrame':
@@ -1286,7 +1284,10 @@ class EqualityAsserter:
                 left = [left[idx] for idx in order_left]
                 right = [right[idx] for idx in order_right]
 
-            msg = "column=" + column
+            msg = "\nDifference for column: {} \n\n".format(column)
+            msg += tabulate.tabulate(zip(*[left, right]),
+                                     headers=["ACTUAL", "DESIRED"], )
+            msg += "\n"
             assert_equal(left, right, err_msg=msg)
 
     def _assert_shape(self, other: 'PlainFrame'):
@@ -1331,10 +1332,12 @@ class EqualityAsserter:
                 msg = "Mismatching column names: "
 
                 if left_exclusive:
-                    msg += "Right does not have columns: {}. "
+                    msg += ("Right does not have columns: {}. "
+                            .format(left_exclusive))
 
                 if right_exclusive:
-                    msg += "Left does not have columns: {}. "
+                    msg += ("Left does not have columns: {}. "
+                            .format(right_exclusive))
 
                 raise AssertionError(msg)
 
