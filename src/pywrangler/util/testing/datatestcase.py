@@ -1,10 +1,13 @@
 """This module contains the DataTestCase class.
 
 """
-from functools import wraps
+import itertools
+from functools import wraps, partial, partialmethod
 from typing import Callable, Optional, Iterable, Dict, Any, Union, List
 
 import pandas as pd
+from pywrangler.util.testing.mutants import BaseMutant, ValueMutant, \
+    MutantCollection
 from pywrangler.util.testing.plainframe import PlainFrame
 
 
@@ -22,36 +25,53 @@ class EngineTester:
         self.parent = parent
 
     def __call__(self, test_func: Callable, args: Optional[Iterable] = None,
-                 kwargs: Optional[Dict[str, Any]] = None, **test_kwargs):
+                 kwargs: Optional[Dict[str, Any]] = None,
+                 engine: Optional[str] = None, **test_kwargs):
         """Assert test data input/output equality for a given test function.
-        Input  data is passed to the test function and the result is compared
-        to output data. Chooses computation engine as specified by parent.
+        Input data is passed to the test function and the result is compared
+        to output data. Chooses computation engine as specified by parent or
+        given by `engine`.
 
-                Parameters
+        Parameters
         ----------
         test_func: callable
             A function that takes a pandas dataframe as the first keyword
             argument.
-        args: iterable, optional
-            Positional arguments which will be passed to `func`.
-        kwargs: dict, optional
-            Keyword arguments which will be passed to `func`.
+        test_args: iterable, optional
+            Positional arguments which will be passed to `test_func`.
+        test_kwargs: dict, optional
+            Keyword arguments which will be passed to `test_func`.
         test_kwargs: dict, optional
             Any computation specific keyword arguments (like `repartition` for
             pyspark).
+        engine: str, optional
+            Set computation engine to perform test with.
+
+        Raises
+        ------
+        AssertionError is thrown if computed and expected results do not match.
 
         """
 
-        engine = {"pandas": self.pandas,
-                  "pyspark": self.pyspark}
+        engine = engine or self.parent.engine
+        if not engine:
+            raise ValueError("EngineTester: Computation engine needs to be "
+                             "provided either via DataTestCase instantiation "
+                             "or via calling `DataTestCase.test()`.")
 
-        engine[self.parent.engine](test_func,
-                                   args=args,
-                                   kwargs=kwargs,
-                                   **test_kwargs)
+        engines = {"pandas": self.pandas,
+                   "pyspark": self.pyspark}
 
-    def pandas(self, test_func: Callable, args: Optional[Iterable] = None,
-               kwargs: Optional[Dict[str, Any]] = None,
+        asserter = engines.get(engine)
+        if not asserter:
+            raise ValueError("Provided engine `{}` is not valid. Available "
+                             "engines are: {}."
+                             .format(engine, engines.keys()))
+
+        asserter(test_func, test_args=args, test_kwargs=kwargs, **test_kwargs)
+
+    def pandas(self, test_func: Callable, test_args: Optional[Iterable] = None,
+               test_kwargs: Optional[Dict[str, Any]] = None,
                merge_input: Optional[bool] = False):
         """Assert test data input/output equality for a given test function.
         Input  data is passed to the test function and the result is compared
@@ -76,34 +96,30 @@ class EngineTester:
         test_func: callable
             A function that takes a pandas dataframe as the first keyword
             argument.
-        args: iterable, optional
-            Positional arguments which will be passed to `func`.
-        kwargs: dict, optional
-            Keyword arguments which will be passed to `func`.
+        test_args: iterable, optional
+            Positional arguments which will be passed to `test_func`.
+        test_kwargs: dict, optional
+            Keyword arguments which will be passed to `test_func`.
         merge_input: bool, optional
             Merge input dataframe to the computed result of the test function
             (inner join on index).
 
+        Raises
+        ------
+        AssertionError is thrown if computed and expected results do not match.
+
         """
 
-        args = args or ()
-        kwargs = kwargs or {}
+        output_func = partial(self._pandas_output, merge_input=merge_input)
 
-        df_input = self.parent.input.to_pandas()
-        df_result = test_func(df_input, *args, **kwargs)
+        return self.generic_assert(test_func=test_func,
+                                   test_args=test_args,
+                                   test_kwargs=test_kwargs,
+                                   output_func=output_func)
 
-        if merge_input:
-            if isinstance(df_result, pd.Series):
-                df_result = df_input.assign(**{df_result.name: df_result})
-            else:
-                df_result = pd.merge(df_input, df_result, left_index=True,
-                                     right_index=True, how="inner")
-
-        output = self.parent.output
-        output.assert_equal(PlainFrame.from_pandas(df_result))
-
-    def pyspark(self, test_func: Callable, args: Optional[Iterable] = None,
-                kwargs: Optional[Dict[str, Any]] = None,
+    def pyspark(self, test_func: Callable,
+                test_args: Optional[Iterable] = None,
+                test_kwargs: Optional[Dict[str, Any]] = None,
                 repartition: Optional[Union[int, List[str]]] = None):
         """Assert test data input/output equality for a given test function.
         Input  data is passed to the test function and the result is compared
@@ -117,30 +133,280 @@ class EngineTester:
         test_func: callable
             A function that takes a pandas dataframe as the first keyword
             argument.
-        args: iterable, optional
-            Positional arguments which will be passed to `func`.
-        kwargs: dict, optional
-            Keyword arguments which will be passed to `func`.
+        test_args: iterable, optional
+            Positional arguments which will be passed to `test_func`.
+        test_kwargs: dict, optional
+            Keyword arguments which will be passed to `test_func`.
         repartition: int, list, optional
             Repartition input dataframe.
 
+        Raises
+        ------
+        AssertionError is thrown if computed and expected results do not match.
+
         """
 
-        args = args or ()
-        kwargs = kwargs or {}
+        output_func = partial(self._pyspark_output, repartition=repartition)
 
-        df_input = self.parent.input.to_pyspark()
+        return self.generic_assert(test_func=test_func,
+                                   test_args=test_args,
+                                   test_kwargs=test_kwargs,
+                                   output_func=output_func)
 
+    def generic_assert(self, test_func: Callable,
+                       test_args: Optional[Iterable],
+                       test_kwargs: Optional[Dict[str, Any]],
+                       output_func: Callable):
+        """Generic assertion function for all computation engines which
+        requires a computation engine specific output generation function.
+
+        Parameters
+        ----------
+        test_func: callable
+            A function that takes a pandas dataframe as the first keyword
+            argument.
+        test_args: iterable, optional
+            Positional arguments which will be passed to `test_func`.
+        test_kwargs: dict, optional
+            Keyword arguments which will be passed to `test_func`.
+        output_func: callable
+            Output generation function which is computation engine specific.
+
+        """
+
+        test_args = test_args or ()
+        test_kwargs = test_kwargs or {}
+        test_func = partial(test_func, *test_args, **test_kwargs)
+
+        pf_input = self.parent.input
+        pf_output = self.parent.output
+
+        generate_output = partial(output_func,
+                                  pf_input=pf_input,
+                                  test_func=test_func)
+
+        # standard
+        output_computed = generate_output()
+        output_computed.assert_equal(pf_output)
+
+        # mutants
+        self.generic_assert_mutants(generate_output)
+
+    @staticmethod
+    def _pyspark_output(pf_input: PlainFrame, test_func: Callable,
+                        repartition: Optional[Union[int, List[str]]],
+                        mutant: Optional[BaseMutant] = None) -> PlainFrame:
+        """Helper function to generate computed output of DataTestCase for
+        given test function.
+
+        Parameters
+        ----------
+        pf_input: PlainFrame
+            Test data input.
+        test_func: callable
+            A function that takes a pandas dataframe as the first keyword
+            argument.
+        repartition: int, list, optional
+            Repartition input dataframe.
+        mutant: BaseMutant, optional
+            Optional mutant to modify input dataframe.
+
+        Returns
+        -------
+        output_computed: PlainFrame
+
+        """
+
+        # check for mutation
+        if mutant:
+            pf_input = mutant.mutate(pf_input)
+        df_input = pf_input.to_pyspark()
+
+        # engine specific
         if repartition is not None:
             df_input = df_input.repartition(repartition)
 
-        df_result = test_func(df_input, *args, **kwargs)
+        # compute result
+        df_result = test_func(df_input)
+        output_computed = PlainFrame.from_pyspark(df_result)
 
-        output = self.parent.output
-        output.assert_equal(PlainFrame.from_pyspark(df_result))
+        return output_computed
+
+    @staticmethod
+    def _pandas_output(pf_input: PlainFrame, test_func: Callable,
+                       merge_input: Optional[bool],
+                       mutant: Optional[BaseMutant] = None):
+        """Helper function to generate computed output of DataTestCase for
+        given test function.
+
+        Parameters
+        ----------
+        pf_input: PlainFrame
+            Test data input.
+        test_func: callable
+            A function that takes a pyspark dataframe as the first keyword
+            argument.
+        merge_input: bool, optional
+            Merge input dataframe to the computed result of the test function
+            (inner join on index).
+        mutant: BaseMutant, optional
+            Optional mutant to modify input dataframe.
+
+        Returns
+        -------
+        output_computed: PlainFrame
+
+        """
+
+        # check for mutation
+        if mutant:
+            pf_input = mutant.mutate(pf_input)
+        df_input = pf_input.to_pandas()
+
+        # compute result
+        df_result = test_func(df_input)
+
+        if merge_input:
+            if isinstance(df_result, pd.Series):
+                df_result = df_input.assign(**{df_result.name: df_result})
+            else:
+                df_result = pd.merge(df_input, df_result, left_index=True,
+                                     right_index=True, how="inner")
+
+        output_computed = PlainFrame.from_pandas(df_result)
+
+        return output_computed
+
+    def generic_assert_mutants(self, func_generate_output: Callable):
+        """Given a computation engine specific output generation function
+        `generate_output`, iterate all available mutants and confirm their test
+        assertion.
+
+        Parameters
+        ----------
+        func_generate_output: callable
+            Computation engine specific function that creates output
+            PlainFrame given a mutant.
+
+        Raises
+        ------
+        AssertionError is raised if a mutant is not killed.
+
+        """
+
+        for mutant in self.parent.mutants:
+            output_computed = func_generate_output(mutant=mutant)
+
+            try:
+                output_computed.assert_equal(self.parent.output)
+                killed = False
+
+            except AssertionError:
+                killed = True
+
+            finally:
+                if not killed:
+                    raise AssertionError("DataTestCase: Mutant {} survived."
+                                         .format(mutant))
+
+
+def convert_mutants(raw: Optional[Union[dict, List[BaseMutant]]]) \
+        -> List[BaseMutant]:
+    """Helper function to ensure provided mutants are correctly converted
+    to a list of Mutants instances.
+
+    """
+
+    if not raw:
+        return []
+
+    elif isinstance(raw, dict):
+        value_mutants = [
+            ValueMutant(column=column, row=row, value=value)
+            for (column, row), value in raw.items()]
+
+        if len(value_mutants) == 1:
+            return value_mutants
+        else:
+            collection = MutantCollection(mutants=value_mutants)
+            return [collection]
+
+    elif isinstance(raw, BaseMutant):
+        return [raw]
+
+    elif isinstance(raw, list):
+        mutants = [convert_mutants(x) for x in raw]
+        return list(itertools.chain.from_iterable(mutants))
+
+    else:
+        raise ValueError(
+            "DataTestCase: Invalid mutant definition provided. "
+            "It has to be a dict, list or a subclasses of "
+            "BaseMutant. However, {} was provided."
+                .format(type(raw)))
+
+
+def convert_plainframe(result: Union[PlainFrame, dict, tuple]) -> PlainFrame:
+    """Helper function to ensure provided data input is correctly converted
+    to `PlainFrame`.
+
+    Checks following scenarios: If PlainFrame is given, simply pass. If
+    dict is given, call constructor from dict. If tuple is given, pass to
+    normal init of PlainFrame.
+
+    For more, please see documentation on DataTestCase.
+
+    Parameters
+    ----------
+    result: PlainFrame, dict, tuple
+        Input to be converted.
+
+    Returns
+    -------
+    plainframe: PlainFrame
+
+    """
+
+    if isinstance(result, PlainFrame):
+        return result
+    elif isinstance(result, dict):
+        return PlainFrame.from_dict(result)
+    elif isinstance(result, tuple):
+        return PlainFrame(*result)
+    else:
+        raise ValueError("Unsupported data encountered. Data "
+                         "needs to be a PlainFrame, a dict or a "
+                         "tuple. Provided type is {}."
+                         .format(type(result)))
+
+
+def convert_method(func: Callable, convert: Callable) -> Callable:
+    """Helper function to wrap a given function with a given converter
+    function.
+
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        raw = func(self, *args, **kwargs)
+        return convert(raw)
+
+    return wrapper
 
 
 class TestDataConverter(type):
+    """Metaclass for DataTestCase. It's main purpose is to simplify the usage
+    of DataTestCase and to avoid boilerplate code.
+
+    Essentially, it wraps and modifies the results of the `input`, `output` and
+    `mutants` methods of DataTestCase.
+
+    For `input` and `output`, in converts the result to PlainFrame. For
+    `mutants`, it converts the result to BaseMutant. Additionally, methods are
+    wrapped as properties for simple dot notation access.
+
+    """
+
     def __new__(mcl, name, bases, nmspc):
         mandatory = ("input", "output")
 
@@ -150,48 +416,21 @@ class TestDataConverter(type):
                                           "implement '{}' method."
                                           .format(name, mand))
 
-        wrapped = {key: TestDataConverter.ensure_format(nmspc[key])
+        wrapped = {key: convert_method(nmspc[key], convert_plainframe)
                    for key in mandatory}
+
+        mutant_func = nmspc.get("mutants", lambda x: [])
+        wrapped["mutants"] = convert_method(mutant_func, convert_mutants)
 
         newclass = super(TestDataConverter, mcl).__new__(mcl, name, bases,
                                                          nmspc)
-        for key, func in wrapped.items():
-            setattr(newclass, key, property(func))
+        for key, value in wrapped.items():
+            setattr(newclass, key, property(value))
 
         return newclass
 
     def __init__(cls, name, bases, nmspc):
         super(TestDataConverter, cls).__init__(name, bases, nmspc)
-
-    @staticmethod
-    def ensure_format(data_func):
-        """Helper function to ensure provided data input is correctly converted
-        to `PlainFrame`.
-
-        Checks following scenarios: If PlainFrame is given, simply pass. If
-        dict is given, call constructor from dict. If tuple is given, pass to
-        normal init of PlainFrame.
-
-        """
-        print("Wrapping")
-
-        @wraps(data_func)
-        def wrapper(self, *args, **kwargs):
-            print(args, kwargs)
-            result = data_func(self, *args, **kwargs)
-            if isinstance(result, PlainFrame):
-                return result
-            elif isinstance(result, dict):
-                return PlainFrame.from_dict(result)
-            elif isinstance(result, tuple):
-                return PlainFrame(*result)
-            else:
-                raise ValueError("Unsupported data encountered. Data needs "
-                                 "needs to be a TestDataFrame, a dict or a "
-                                 "tuple. Provided type is {}."
-                                 .format(type(result)))
-
-        return wrapper
 
 
 class DataTestCase(metaclass=TestDataConverter):
@@ -240,11 +479,11 @@ class DataTestCase(metaclass=TestDataConverter):
     >>> columns = ["col1:int", "col2:str"]
     >>> result = (data, columns)
 
-    In any case, you may also provide `PlainFrame` directly.
+    In any case, you may also provide a `PlainFrame` directly.
 
     """
 
-    def __init__(self, engine):
+    def __init__(self, engine: Optional[str] = None):
         self.engine = engine
         self.test = EngineTester(self)
 
@@ -272,6 +511,26 @@ class DataTestCase(metaclass=TestDataConverter):
         """Mutants describe modifications to the input data which should cause
         the test to fail.
 
+        Mutants can be defined in various formats. You can provide a single
+        mutant like:
+        >>> return ValueMutant(column="col1", row=0, value=3)
+
+        This is identical to the dictionary notation:
+        >>> return {("col1", 0): 3}
+
+        If you want to provide multiple mutations within one mutant at once,
+        you can use the `MutantCollection` or simply rely on the dictionary
+        notation:
+        >>> return {("col1", 2): 5, ("col2", 1): "asd"}
+
+        If you want to provide multiple mutants at once, you may provide
+        multiple dictionaries within a list:
+        >>>  [{("col1", 2): 5}, {("col1", 2): 3}]
+
+        Overall, all subclasses of `BaseMutant` are allowed to be used. You may
+        also mix a specialized mutant with the dictionary notation:
+        >>> [RandomMutant(), {("col1", 0): 1}]
+
         """
 
-        ("col1", 3)
+        pass
