@@ -938,11 +938,13 @@ def first_start_last_end_end_begins(start, end, noise, target_column_name):
             [11,     1,        start,   2],
             [12,     1,        noise,   2],
             [13,     1,        end,     2],
-            [14,     1,        start,   3],
-            [15,     1,        noise,   3],
-            [16,     1,        end,     3],
-            [17,     1,        end,     3],
-            [18,     1,        end,     3]]
+            [14,     1,        noise,   0],
+            [15,     1,        noise,   0],
+            [16,     1,        start,   3],
+            [17,     1,        noise,   3],
+            [18,     1,        end,     3],
+            [19,     1,        end,     3],
+            [20,     1,        end,     3]]
 
     return _return_dfs(data, target_column_name)
 
@@ -962,10 +964,12 @@ def first_start_last_end_start_begins(start, end, noise, target_column_name):
             [11,     1,        start,   2],
             [12,     1,        noise,   2],
             [13,     1,        end,     2],
-            [14,     1,        start,   3],
-            [15,     1,        noise,   3],
-            [16,     1,        end,     3],
-            [17,     1,        end,     3],
-            [18,     1,        end,     3]]
+            [14,     1,        noise,   0],
+            [15,     1,        noise,   0],
+            [16,     1,        start,   3],
+            [17,     1,        noise,   3],
+            [18,     1,        end,     3],
+            [19,     1,        end,     3],
+            [20,     1,        end,     3]]
 
     return _return_dfs(data, target_column_name)
