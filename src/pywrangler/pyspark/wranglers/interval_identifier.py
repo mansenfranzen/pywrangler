@@ -61,14 +61,51 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         return bool_start_end, marker_col
 
     def _identify_valids(self, bool_start_end, raw_iids, w_id, operator):
+        """Identifies valid/invalid intervals
 
+        Parameters
+        ----------
+        bool_start_end: pyspark.sql.Column
+            Column with marks marker_start and marker_end as bool values
+        raw_iids: pyspark.sql.Column
+            interval ids for intervals
+        w_id: pyspark.sql.Window
+            window function of the interval ids
+        operator: operator
+            compare operator
+
+        Returns
+        -------
+        bool_valid: pyspark.sql.Column
+            valid intervals
+        valis_ids: pysparl.sql.Column
+            interval ids
+
+        """
         left_compare = F.sum(bool_start_end).over(w_id)
         bool_valid = operator(left_compare, 2)
         valid_ids = F.when(bool_valid, raw_iids).otherwise(0)
         return bool_valid, valid_ids
 
     def _prepare_iids(self, marker_col, w_lag, start_first, add_negate_shift_col):
+        """
 
+        Parameters
+        ----------
+        marker_col: pyspark.sql.Column
+            Column where the markers are in
+        w_lag: pyspark.sql.Window
+            Defining the window
+        start_first: bool
+            Defines if the first start is used for intervals
+        add_negate_shift_col: bool
+            True if the shift col have to be negated
+
+        Returns
+        -------
+        result: NamedTuple
+            returns the raw interval ids and the forward filled marker Column
+        """
         # generate forward fill depending on interval
         if start_first:
             default = 0
@@ -105,8 +142,24 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         return nt(F.sum(add_col).over(w_lag), forward_fill_col)
 
     def _continuous_renumeration(self, bool_valid, valid_ids, w_lag):
+        """re-numerate ids from 1 to x and fill invalid with 0
 
-        # re-numerate ids from 1 to x and fill invalid with 0
+        Parameters
+        ----------
+        bool_valid: pyspark.sql.Column
+            Marked as valid
+        valid_ids: pyspark.sql.Column
+            values for valid ids
+        w_lag: pyspark.sql.Window
+            Defining window
+
+        Returns
+        -------
+        result: pyspark.sql.Column
+            Continuous renumerated interval ids. Can be increasing oder decreasing.
+
+        """
+
         valid_ids_shift = F.lag(valid_ids, default=0).over(w_lag)
         valid_ids_diff = valid_ids_shift - valid_ids
         valid_ids_increase = (valid_ids_diff < 0).cast("integer")
