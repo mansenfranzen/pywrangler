@@ -1,13 +1,11 @@
 """This module contains the DataTestCase class.
 
 """
-import itertools
-from functools import wraps, partial, partialmethod
-from typing import Callable, Optional, Iterable, Dict, Any, Union, List
+from functools import wraps, partial
+from typing import Callable, Optional,  Dict, Any, Union, List
 
 import pandas as pd
-from pywrangler.util.testing.mutants import BaseMutant, ValueMutant, \
-    MutantCollection
+from pywrangler.util.testing.mutants import BaseMutant
 from pywrangler.util.testing.plainframe import PlainFrame
 
 

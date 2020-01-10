@@ -5,7 +5,6 @@ import collections
 import copy
 import functools
 import numbers
-from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, \
     Union, NamedTuple
@@ -14,7 +13,7 @@ import numpy as np
 import pandas as pd
 import tabulate
 from numpy.testing import assert_equal
-from pandas.api import types
+from pandas.api import types as pd_types
 from pywrangler.util.dependencies import is_available, requires
 
 
@@ -1052,7 +1051,7 @@ class ConverterFromPandas:
             if column in dtypes_validated:
                 continue
 
-            if types.is_object_dtype(self.df[column]):
+            if pd_types.is_object_dtype(self.df[column]):
                 dtypes_object[column] = self.inspect_dtype_object(column)
 
         return dtypes_object
@@ -1172,10 +1171,10 @@ class ConverterFromPandas:
 
         """
 
-        mapping = {types.is_bool_dtype: "bool",
-                   types.is_integer_dtype: "int",
-                   types.is_float_dtype: "float",
-                   types.is_datetime64_any_dtype: "datetime"}
+        mapping = {pd_types.is_bool_dtype: "bool",
+                   pd_types.is_integer_dtype: "int",
+                   pd_types.is_float_dtype: "float",
+                   pd_types.is_datetime64_any_dtype: "datetime"}
 
         for check, result in mapping.items():
             if check(series):
