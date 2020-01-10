@@ -2,10 +2,9 @@
 
 """
 
-from typing import List
+from typing import List, Callable
 
 import pandas as pd
-
 from pywrangler.pandas import util
 from pywrangler.pandas.base import PandasSingleNoFit
 from pywrangler.wranglers import IntervalIdentifier
@@ -39,7 +38,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         util.validate_columns(df, self.groupby_columns)
         util.validate_empty_df(df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _transform(self, df: pd.DataFrame, transformer: Callable) -> pd.DataFrame:
         """Extract interval ids from given dataframe.
 
         Parameters
@@ -61,7 +60,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         df_grouped = util.groupby(df_ordered, self.groupby_columns)
 
         df_result = df_grouped[self.marker_column] \
-            .transform(self._transform) \
+            .transform(transformer) \
             .astype(int) \
             .reindex(df.index) \
             .to_frame(self.target_column_name)
@@ -71,19 +70,38 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
 
         return df_result
 
-    def _transform(self, series: pd.Series) -> List[int]:
-        """Needs to be implemented.
-
-        """
-
-        raise NotImplementedError
-
 
 class NaiveIterator(_BaseIntervalIdentifier):
     """Most simple, sequential implementation which iterates values while
     remembering the state of start and end markers.
 
     """
+
+    def transform(self, df: pd.DataFrame) -> List[int]:
+        """Selects appropriate algorithm depending on identical/different
+        start and end markers.
+
+        """
+
+        start_first = self.marker_start_use_first
+        end_first = self.marker_end_use_first
+
+        if self._identical_start_end_markers:
+            transformer = self._agg_identical_start_end_markers
+
+        elif ~start_first & end_first:
+            transformer = self._last_start_first_end
+
+        elif start_first & ~end_first:
+            raise NotImplementedError
+
+        elif start_first & end_first:
+            raise NotImplementedError
+
+        else:
+            raise NotImplementedError
+
+        return self._transform(df, transformer)
 
     def _is_start(self, value):
         return value == self.marker_start
@@ -116,18 +134,7 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
         return self._is_end(value) and active
 
-    def _transform(self, series: pd.Series) -> List[int]:
-        """Selects appropriate algorithm depending on identical/different
-        start and end markers.
-
-        """
-
-        if self._identical_start_end_markers:
-            return self._transform_start_only(series)
-        else:
-            return self._transform_start_and_end(series)
-
-    def _transform_start_only(self, series: pd.Series) -> List[int]:
+    def _agg_identical_start_end_markers(self, series: pd.Series) -> List[int]:
         """Iterates given `series` testing each value against start marker
         while increasing counter each time start marker is encountered.
 
@@ -146,8 +153,7 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
         return result
 
-
-    def _transform_start_and_end(self, series: pd.Series) -> List[int]:
+    def _last_start_first_end(self, series: pd.Series) -> List[int]:
         """Iterates given `series` testing each value against start and end
         markers while keeping track of already instantiated intervals to
         separate valid from invalid intervals.
@@ -201,8 +207,31 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
 
     """
 
-    def _transform(self, series: pd.Series) -> List[int]:
-        """First, get enumeration of all intervals (valid and invalid). Every
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        start_first = self.marker_start_use_first
+        end_first = self.marker_end_use_first
+
+        if self._identical_start_end_markers:
+            transformer = self._agg_identical_start_end_markers
+
+        elif ~start_first & end_first:
+            transformer = self._last_start_first_end
+
+        elif start_first & ~end_first:
+            raise NotImplementedError
+
+        elif start_first & end_first:
+            raise NotImplementedError
+
+        else:
+            raise NotImplementedError
+
+        return self._transform(df, transformer)
+
+    def _last_start_first_end(self, series: pd.Series) -> List[int]:
+        """Extract shortest intervals from given dataFrame as ids.
+        First, get enumeration of all intervals (valid and invalid). Every
         time a start or end marker is encountered, increase interval id by one.
         The end marker is shifted by one to include the end marker in the
         current interval. This is realized via the cumulative sum of boolean
@@ -220,10 +249,6 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
 
         # get boolean series with start and end markers
         bool_start = series.eq(self.marker_start)
-
-        if self._identical_start_end_markers:
-            return bool_start.cumsum()
-
         bool_end = series.eq(self.marker_end)
 
         # shifting the close marker allows cumulative sum to include the end
@@ -241,3 +266,8 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
         # re-numerate ids from 1 to x and fill invalid with 0
         result = ser_ids[bool_valid].diff().ne(0).cumsum()
         return result.reindex(series.index).fillna(0).values
+
+    def _agg_identical_start_end_markers(self, series: pd.Series) -> List[int]:
+
+        bool_start = series.eq(self.marker_start)
+        return bool_start.cumsum()
