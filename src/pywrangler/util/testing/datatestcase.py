@@ -52,6 +52,7 @@ class EngineTester:
         """
 
         engine = engine or self.parent.engine
+
         if not engine:
             raise ValueError("EngineTester: Computation engine needs to be "
                              "provided either via DataTestCase instantiation "
@@ -113,7 +114,6 @@ class EngineTester:
                                    output_func=output_func)
 
     def pyspark(self, test_func: Callable,
-                test_args: Optional[Iterable] = None,
                 test_kwargs: Optional[Dict[str, Any]] = None,
                 repartition: Optional[Union[int, List[str]]] = None):
         """Assert test data input/output equality for a given test function.
@@ -300,76 +300,6 @@ class EngineTester:
                                          .format(mutant))
 
 
-def convert_mutants(raw: Optional[Union[dict, List[BaseMutant]]]) \
-        -> List[BaseMutant]:
-    """Helper function to ensure provided mutants are correctly converted
-    to a list of Mutants instances.
-
-    """
-
-    if not raw:
-        return []
-
-    elif isinstance(raw, dict):
-        value_mutants = [
-            ValueMutant(column=column, row=row, value=value)
-            for (column, row), value in raw.items()]
-
-        if len(value_mutants) == 1:
-            return value_mutants
-        else:
-            collection = MutantCollection(mutants=value_mutants)
-            return [collection]
-
-    elif isinstance(raw, BaseMutant):
-        return [raw]
-
-    elif isinstance(raw, list):
-        mutants = [convert_mutants(x) for x in raw]
-        return list(itertools.chain.from_iterable(mutants))
-
-    else:
-        raise ValueError(
-            "DataTestCase: Invalid mutant definition provided. "
-            "It has to be a dict, list or a subclasses of "
-            "BaseMutant. However, {} was provided."
-                .format(type(raw)))
-
-
-def convert_plainframe(result: Union[PlainFrame, dict, tuple]) -> PlainFrame:
-    """Helper function to ensure provided data input is correctly converted
-    to `PlainFrame`.
-
-    Checks following scenarios: If PlainFrame is given, simply pass. If
-    dict is given, call constructor from dict. If tuple is given, pass to
-    normal init of PlainFrame.
-
-    For more, please see documentation on DataTestCase.
-
-    Parameters
-    ----------
-    result: PlainFrame, dict, tuple
-        Input to be converted.
-
-    Returns
-    -------
-    plainframe: PlainFrame
-
-    """
-
-    if isinstance(result, PlainFrame):
-        return result
-    elif isinstance(result, dict):
-        return PlainFrame.from_dict(result)
-    elif isinstance(result, tuple):
-        return PlainFrame(*result)
-    else:
-        raise ValueError("Unsupported data encountered. Data "
-                         "needs to be a PlainFrame, a dict or a "
-                         "tuple. Provided type is {}."
-                         .format(type(result)))
-
-
 def convert_method(func: Callable, convert: Callable) -> Callable:
     """Helper function to wrap a given function with a given converter
     function.
@@ -406,11 +336,12 @@ class TestDataConverter(type):
                                           "implement '{}' method."
                                           .format(name, mand))
 
-        wrapped = {key: convert_method(nmspc[key], convert_plainframe)
+        wrapped = {key: convert_method(nmspc[key], PlainFrame.from_any)
                    for key in mandatory}
 
         mutant_func = nmspc.get("mutants", lambda x: [])
-        wrapped["mutants"] = convert_method(mutant_func, convert_mutants)
+        wrapped["mutants"] = convert_method(mutant_func,
+                                            BaseMutant.from_multiple_any)
 
         newclass = super(TestDataConverter, mcl).__new__(mcl, name, bases,
                                                          nmspc)
@@ -522,5 +453,3 @@ class DataTestCase(metaclass=TestDataConverter):
         >>> [RandomMutant(), {("col1", 0): 1}]
 
         """
-
-        pass
