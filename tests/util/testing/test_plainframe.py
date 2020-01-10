@@ -332,6 +332,17 @@ def test_plainframe_from_plain():
                           dtypes=["int", "int"])
 
 
+def test_plainframe_to_plain():
+    columns = dtypes = ["int", "float", "bool", "str"]
+    data = [[1, 1.1, True, "string"],
+            [2, 2, False, "string2"]]
+
+    pf = PlainFrame.from_plain(data=data, columns=columns, dtypes=dtypes)
+
+    expected = (data, columns, dtypes)
+    assert pf.to_plain() == expected
+
+
 def test_plainframe_from_dict():
     data = collections.OrderedDict(
         [("col1:int", [1, 2, 3]),
@@ -613,6 +624,28 @@ def test_plainframe_to_pyspark(plainframe_missings):
 
     assert res[0].datetime == datetime.datetime(2019, 1, 1, 10)
     assert res[2].datetime is None
+
+
+def test_plainframe_from_any(plainframe_standard):
+    conv = PlainFrame.from_any
+    # test plainframe
+    assert conv(plainframe_standard) == plainframe_standard
+
+    # test dict
+    assert conv(plainframe_standard.to_dict()) == plainframe_standard
+
+    # test tuple
+    assert conv(plainframe_standard.to_plain()) == plainframe_standard
+
+    # test pandas
+    assert conv(plainframe_standard.to_pandas()) == plainframe_standard
+
+    # test pyspark
+    assert conv(plainframe_standard.to_pyspark()) == plainframe_standard
+
+    # test wrong type
+    with pytest.raises(ValueError):
+        conv("string")
 
 
 def test_plainframe_assert_equal():

@@ -15,6 +15,7 @@ import pandas as pd
 import tabulate
 from numpy.testing import assert_equal
 from pandas.api import types
+from pywrangler.util.dependencies import is_available, requires
 
 
 @functools.total_ordering
@@ -43,6 +44,8 @@ NULL = NullValue()
 TYPE_ROW = List[Union[bool, int, float, str, datetime, NullValue]]
 TYPE_DSTR = Dict[str, str]
 TYPE_DTYPE_INPUT = Union[List[str], TYPE_DSTR]
+TYPE_ANY_PF = Union['PlainFrame', dict, tuple, pd.DataFrame,
+                    'pyspark.sql.DataFrame']
 PRIMITIVE_TYPES = {"bool": (bool, NullValue),
                    "int": (int, NullValue),
                    "float": (float, int, NullValue),
@@ -109,6 +112,7 @@ class PlainColumn(_ImmutablePlainColumn):
         return ConverterToPandas(self)
 
     @property
+    @requires("pyspark")
     def to_pyspark(self) -> 'ConverterToPySpark':
         """Composite for conversion functionality to pyspark.
 
@@ -278,15 +282,15 @@ class PlainFrame(_ImmutablePlainFrame):
         return [column.dtype for column in self.plaincolumns]
 
     @property
-    def data(self) -> List[Tuple]:
+    def data(self) -> List[List[Any]]:
         """Return data of PlainFrame row wise.
 
         """
 
-        data = [column.values for column in self.plaincolumns]
-        transposed = list(zip(*data))
+        column_wise = [column.values for column in self.plaincolumns]
+        row_wise = [list(row) for row in zip(*column_wise)]
 
-        return transposed
+        return row_wise
 
     @property
     def n_rows(self) -> int:
@@ -350,6 +354,7 @@ class PlainFrame(_ImmutablePlainFrame):
 
         return pd.DataFrame(data, columns=self.columns)
 
+    @requires("pyspark")
     def to_pyspark(self):
         """Converts test data table into a pandas dataframe.
 
@@ -583,6 +588,18 @@ class PlainFrame(_ImmutablePlainFrame):
 
         return cls(plaincolumns=tuple(plaincolumns))
 
+    def to_plain(self) -> Tuple[List[List], List[str], List[str]]:
+        """Converts PlainFrame into tuple with 3 values (data, columns,
+        dtypes).
+
+        Returns
+        -------
+        data, columns, values
+
+        """
+
+        return self.data, self.columns, self.dtypes
+
     @classmethod
     def from_dict(cls, data: 'collections.OrderedDict[str, Sequence]') \
             -> 'PlainFrame':
@@ -621,6 +638,48 @@ class PlainFrame(_ImmutablePlainFrame):
                    for column in self.plaincolumns]
 
         return collections.OrderedDict(columns)
+
+    @classmethod
+    def from_any(cls, raw: TYPE_ANY_PF) -> 'PlainFrame':
+        """Instantiate `PlainFrame` from any possible type supported.
+
+        Checks following scenarios: If PlainFrame is given, simply pass. If
+        dict is given, call constructor from dict. If tuple is given, call
+        constructor from plain. If pandas dataframe is given, call from pandas.
+        If spark dataframe is given, call from pyspark.
+
+        Parameters
+        ----------
+        raw: TYPE_ANY_PF
+            Input to be converted.
+
+        Returns
+        -------
+        plainframe: PlainFrame
+
+        """
+
+        if isinstance(raw, cls):
+            return raw
+
+        elif isinstance(raw, dict):
+            return cls.from_dict(raw)
+
+        elif isinstance(raw, tuple):
+            return cls.from_plain(*raw)
+
+        elif isinstance(raw, pd.DataFrame):
+            return cls.from_pandas(raw)
+
+        if is_available("pyspark"):
+            from pyspark.sql.dataframe import DataFrame
+            if isinstance(raw, DataFrame):
+                return cls.from_pyspark(raw)
+
+        raise ValueError("Unsupported data encountered. Data "
+                         "needs to be a PlainFrame, a dict or a "
+                         "tuple. Provided type is {}."
+                         .format(type(raw)))
 
     @staticmethod
     def _parse_typed_columns(typed_columns: Sequence[str]) \
