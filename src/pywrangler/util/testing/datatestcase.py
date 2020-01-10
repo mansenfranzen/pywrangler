@@ -2,7 +2,7 @@
 
 """
 from functools import wraps, partial
-from typing import Callable, Optional,  Dict, Any, Union, List
+from typing import Callable, Optional, Dict, Any, Union, List, Sequence
 
 import pandas as pd
 from pywrangler.util.testing.mutants import BaseMutant
@@ -451,3 +451,64 @@ class DataTestCase(metaclass=TestDataConverter):
         >>> [RandomMutant(), {("col1", 0): 1}]
 
         """
+
+
+class TestCollection:
+    """Contains one or more DataTestCases. Provides convenient functions to
+    be testable as a group (e.g. for pytest).
+
+    """
+
+    def __init__(self, datatestcases: Sequence[DataTestCase]):
+        self.testcases = datatestcases
+
+    @property
+    def names(self):
+        return [testcase.__name__ for testcase in self.testcases]
+
+    def pytest_parametrize(self, arg: Union[str, Callable]) -> Callable:
+        """Convenient decorator to wrap a test function which will be
+        parametrized with all available DataTestCases in pytest conform manner.
+
+        Decorator can be called before wrapping the test function to supply
+        a custom parameter name or can be used directly with the default
+        parameter name (testcase). See examples for more.
+
+        Parameters
+        ----------
+        arg: str, callable
+            Name of the argument that will be used within the wrapped test
+            function if decorator gets called.
+
+        Examples
+        --------
+
+        If not used with a custom parameter name, `testcase` is used by
+        default:
+
+        >>> test_collection = TestCollection([test1, test2])
+        >>> @test_collection.pytest_parametrize
+        >>> def test_dummy(testcase):
+        >>>     testcase().test.pandas(some_func)
+
+        If a custom parameter name is provided, it will be used:
+
+        >>> test_collection = TestCollection([test1, test2])
+        >>> @test_collection.pytest_parametrize("customname")
+        >>> def test_dummy(customname):
+        >>>     customname().test.pandas(some_func)
+
+
+
+        """
+
+        import pytest
+
+        param = dict(argvalues=self.testcases, ids=self.names)
+
+        if isinstance(arg, str):
+            param["argnames"] = arg
+            return pytest.mark.parametrize(**param)
+        else:
+            param["argnames"] = "testcase"
+            return pytest.mark.parametrize(**param)(arg)

@@ -2,7 +2,7 @@
 
 """
 import pytest
-from pywrangler.util.testing.datatestcase import DataTestCase
+from pywrangler.util.testing.datatestcase import DataTestCase, TestCollection
 
 
 @pytest.fixture
@@ -108,3 +108,24 @@ def test_engine_tester_surviving_mutant():
 
     with pytest.raises(AssertionError):
         TestCase().test.pandas(test_func)
+
+
+def test_test_collection(datatestcase):
+    collection = TestCollection([datatestcase])
+
+    # test init
+    assert collection.testcases == [datatestcase]
+    assert collection.names == ["TestCase"]
+
+    # test with custom parameter name
+    parametrize = pytest.mark.parametrize
+    param = dict(argvalues=[datatestcase], ids=["TestCase"], argnames="a")
+    assert collection.pytest_parametrize("a") == parametrize(**param)
+
+    # test with default parameter name
+    param["argnames"] = "testcase"
+
+    def func():
+        pass
+
+    assert collection.pytest_parametrize(func) == parametrize(**param)(func)
