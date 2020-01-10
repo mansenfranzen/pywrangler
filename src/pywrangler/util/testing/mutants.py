@@ -4,12 +4,15 @@
 import itertools
 from datetime import datetime
 from collections import Counter, defaultdict
-from typing import Any, List, NamedTuple, Sequence, Callable, Tuple, Iterable
+from typing import Any, List, NamedTuple, Sequence, Callable, Tuple, Iterable, \
+    Optional, Union, Dict
 import random
 from string import ascii_letters
 
 from pywrangler.util.helper import get_param_names
 from pywrangler.util.testing.plainframe import PlainFrame
+
+TYPE_RAW_MUTANTS = Optional[Union[dict, 'BaseMutant', List['BaseMutant']]]
 
 ImmutableMutation = NamedTuple("ImmutableMutation", [("column", str),
                                                      ("row", int),
@@ -81,17 +84,141 @@ class BaseMutant:
 
         return df.modify(modifications)
 
+    @classmethod
+    def from_dict(cls, raw: dict) -> Union['ValueMutant', 'MutantCollection']:
+        """Factory method to conveniently convert a raw value into a Mutant
+        instance. This is used for easy Mutant creation in dict format to
+        avoid boilerplate code. Essentially, the dict format understands
+        value mutations only. The key consists of a tuple of column and row and
+        the value represents the actual new value, as follows:
+
+        >>> {("col1", 1): 0}
+
+        is identical to
+
+        >>> ValueMutant(column="col1", row=1, value=0)
+
+        Moreover, multiple mutations may be provided:
+
+        >>> {("col1", 1): 0, ("col1", 2): 1}
+
+        will result into
+
+        >>> MutantCollection([ValueMutant(column="col1", row=1, value=0),
+        >>>                   ValueMutant(column="col1", row=2, value=1)])
+
+        Parameters
+        ----------
+        raw: dict
+            Raw value mutant definitions.
+
+        Returns
+        -------
+        mutant: ValueMutant, MutantCollection
+
+        """
+
+        if not isinstance(raw, dict):
+            raise ValueError("Parameter `raw` needs to be of type dict. "
+                             "However, {} was encountered."
+                             .format(type(raw)))
+
+        value_mutants = [ValueMutant(column=column, row=row, value=value)
+                         for (column, row), value in raw.items()]
+
+        if len(value_mutants) == 1:
+            return value_mutants[0]
+        else:
+            return MutantCollection(mutants=value_mutants)
+
+    @classmethod
+    def from_multiple_any(cls, raw: TYPE_RAW_MUTANTS) -> List['BaseMutant']:
+        """Factory method to conveniently convert raw values into a list of
+        Mutant objects.
+
+        Mutants can be defined in various formats. You can provide a single
+        mutant like:
+        >>> return ValueMutant(column="col1", row=0, value=3)
+
+        This is identical to the dictionary notation:
+        >>> return {("col1", 0): 3}
+
+        If you want to provide multiple mutations within one mutant at once,
+        you can use the `MutantCollection` or simply rely on the dictionary
+        notation:
+        >>> return {("col1", 2): 5, ("col2", 1): "asd"}
+
+        If you want to provide multiple mutants at once, you may provide
+        multiple dictionaries within a list:
+        >>>  [{("col1", 2): 5}, {("col1", 2): 3}]
+
+        Overall, all subclasses of `BaseMutant` are allowed to be used. You may
+        also mix a specialized mutant with the dictionary notation:
+        >>> [RandomMutant(), {("col1", 0): 1}]
+
+        Parameters
+        ----------
+        raw: TYPE_RAW_MUTANTS
+
+        Returns
+        -------
+        mutants: list
+            List of converted mutant instances.
+
+        """
+
+        if not raw:
+            return []
+
+        elif isinstance(raw, dict):
+            return [cls.from_dict(raw)]
+
+        elif isinstance(raw, BaseMutant):
+            return [raw]
+
+        elif isinstance(raw, list):
+            mutants = [cls.from_multiple_any(x) for x in raw]
+            return list(itertools.chain.from_iterable(mutants))
+
+        else:
+            raise ValueError(
+                "DataTestCase: Invalid mutant definition provided. "
+                "It has to be a dict, list or a subclasses of "
+                "BaseMutant. However, {} was provided."
+                    .format(type(raw)))
+
+    def get_params(self) -> Dict[str, Any]:
+        """Retrieve all parameters set within the __init__ method.
+
+        Returns
+        -------
+        param_dict: dictionary
+            Parameter names as keys and corresponding values as values
+
+        """
+
+        param_names = get_param_names(self.__class__.__init__, ["self"])
+        param_dict = {x: getattr(self, x) for x in param_names}
+
+        return param_dict
+
     def __repr__(self):
         """Provide simple string representation for readability.
 
          """
 
-        param_names = get_param_names(self.__class__.__init__, ["self"])
-        param_dict = {x: getattr(self, x) for x in param_names}
+        param_dict = self.get_params()
         repr_dict = ", ".join(["{}={}".format(key, value)
                                for key, value in param_dict.items()])
 
         return "{}({})".format(self.__class__.__name__, repr_dict)
+
+    def __eq__(self, other: 'BaseMutant') -> bool:
+        """Enable comparison for testing purposes on init attributes.
+
+        """
+
+        return self.get_params() == other.get_params()
 
     @staticmethod
     def _check_duplicated_mutations(mutations: Sequence[Mutation]):
@@ -122,7 +249,7 @@ class BaseMutant:
             return column in df.columns
 
         def has_row(row: int) -> bool:
-            return row <= df.n_rows-1
+            return row <= df.n_rows - 1
 
         for mutation in mutations:
             if not has_column(mutation.column):

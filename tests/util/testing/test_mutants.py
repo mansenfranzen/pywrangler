@@ -48,6 +48,63 @@ def test_base_mutant():
     mutants.BaseMutant._check_valid_mutations([m4], df)
 
 
+def test_base_mutant_from_dict():
+    # test dict single
+    raw = {("col1", 0): 1}
+    conv = mutants.ValueMutant(column="col1", row=0, value=1)
+    assert mutants.BaseMutant.from_dict(raw) == conv
+
+    # test dict multi
+    raw = {("col1", 0): 1,
+           ("col2", 0): 0}
+
+    conv = mutants.MutantCollection([
+        mutants.ValueMutant(column="col1", row=0, value=1),
+        mutants.ValueMutant(column="col2", row=0, value=0)
+    ])
+
+    assert mutants.BaseMutant.from_dict(raw) == conv
+
+    # test wrong type
+    with pytest.raises(ValueError):
+        mutants.BaseMutant.from_dict(("col1", 2))
+
+
+def test_base_mutant_from_multiple_any():
+    func = mutants.BaseMutant.from_multiple_any
+
+    # test empty result
+    assert func([]) == []
+    assert func(None) == []
+
+    # test Mutant
+    raw_single = {("col1", 0): 1}
+    conv_single = mutants.ValueMutant(column="col1", row=0, value=1)
+    assert func(conv_single) == [conv_single]
+
+    # test dict single single
+    assert func(raw_single) == [conv_single]
+
+    # test dict single multi
+    raw_multi = {("col1", 0): 1,
+                 ("col2", 0): 0}
+
+    conv_multi = mutants.MutantCollection([
+        mutants.ValueMutant(column="col1", row=0, value=1),
+        mutants.ValueMutant(column="col2", row=0, value=0)
+    ])
+
+    assert func(raw_multi) == [conv_multi]
+
+    # test list mixed
+    raw = [raw_multi, conv_single]
+    assert func(raw) == [conv_multi, conv_single]
+
+    # test incorrect type
+    with pytest.raises(ValueError):
+        func(tuple([1, 2, 3]))
+
+
 def test_value_mutant():
     """Test ValueMutant functionality.
 
@@ -137,7 +194,6 @@ def test_random_mutant():
     assert random("float", 1.1) != 1.1
     assert random("str", "foo") != "foo"
     assert random("datetime", date) != date
-
 
 
 def test_collection_mutant():
