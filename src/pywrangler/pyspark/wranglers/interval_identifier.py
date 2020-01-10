@@ -182,17 +182,24 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         """
 
+        start_first = self.marker_start_use_first
+        end_first = self.marker_end_use_first
+
         # check input
         self.validate_input(df)
 
         if self._identical_start_end_markers:
             return self._agg_identical_start_end_markers(df)
-        elif ~self.marker_start_use_first & self.marker_end_use_first:
+
+        elif ~start_first & end_first:
             return self._last_start_first_end(df)
-        elif self.marker_start_use_first & ~self.marker_end_use_first:
+
+        elif start_first & ~end_first:
             return self._first_start_last_end(df)
-        elif self.marker_start_use_first & self.marker_end_use_first:
+
+        elif start_first & end_first:
             return self._first_start_first_end(df)
+
         else:
             return self._last_start_last_end(df)
 
