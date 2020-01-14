@@ -63,13 +63,17 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return marker_column.eqNullSafe(marker).cast("integer")
 
-    def _denoise_marker_column(self, window):
-        """Return marker column with noises removed and forward filled.
+    def _denoise_marker_column(self, window, start=True):
+        """Return marker column with noises removed and forward/backwards
+         filled.
 
         Parameters
         ----------
         window: pyspark.sql.Window
             Resembles a window specification according to groupby/order.
+        start: bool, optional
+            Indicate fill order. If True, forward fill for start markers. If
+            False, backwards fill for end markers.
 
         Returns
         -------
@@ -86,10 +90,14 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         denoised = F.when(mask_no_noise, marker_column)
 
         # forward fill with remaining start/end markers
-        ffill_window = window.rowsBetween(Window.unboundedPreceding, 0)
-        ffill = F.last(denoised, ignorenulls=True).over(ffill_window)
+        if start:
+            ffill_window = window.rowsBetween(Window.unboundedPreceding, 0)
+            fill = F.last(denoised, ignorenulls=True).over(ffill_window)
+        else:
+            bfill_window = window.rowsBetween(0, Window.unboundedFollowing)
+            fill = F.first(denoised, ignorenulls=True).over(bfill_window)
 
-        return ffill
+        return fill
 
     def _drop_duplicated_marker(self, marker_column, window, start=True):
         """Modify marker column to keep only first start marker or last end
@@ -118,14 +126,14 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
             marker = self.marker_end
             count_lag = -1
 
-        denoised = self._denoise_marker_column(window)
+        denoised = self._denoise_marker_column(window, start)
 
-        # apply modification only to marker start values
-        mask_start_only = denoised == marker
+        # apply modification only to marker values
+        mask_only = denoised == marker
 
         # use shifted column to identify subsequent duplicates
         shifted = F.lag(denoised, count=count_lag).over(window)
-        shifted_start_only = F.when(mask_start_only, shifted)
+        shifted_start_only = F.when(mask_only, shifted)
 
         # nullify duplicates
         mask_drop = (shifted_start_only == marker_column)
