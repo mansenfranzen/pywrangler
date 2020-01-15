@@ -3,6 +3,7 @@
 """
 
 import gc
+import numbers
 import sys
 import timeit
 from typing import Callable, Iterable, List, Union
@@ -329,10 +330,14 @@ class MemoryProfiler(BaseProfiler):
         while counter < self.repetitions:
             gc.collect()
             baseline = memory_usage(**mem_args)
+
+            # API change in memoryprofiler 0.57
             max_usage = memory_usage(func_args, **mem_args)
+            if not isinstance(max_usage, numbers.Number):
+                max_usage = max_usage[0]
 
             baselines.append(self._mb_to_bytes(baseline))
-            max_usages.append(self._mb_to_bytes(max_usage[0]))
+            max_usages.append(self._mb_to_bytes(max_usage))
             counter += 1
 
         self._max_usages = max_usages
