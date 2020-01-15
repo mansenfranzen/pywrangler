@@ -5,7 +5,7 @@
 import pytest
 
 from pywrangler import wranglers
-from pywrangler.util.testing import concretize_abstract_wrangler
+from pywrangler.util.testing.util import concretize_abstract_wrangler
 
 
 @pytest.fixture(scope="module")

@@ -1,15 +1,13 @@
-"""This module contains tests for testing utilities.
+"""This module contains testing util tests.
 
 """
 
 import pytest
-
 from pywrangler.base import BaseWrangler
-from pywrangler.util.testing import concretize_abstract_wrangler
+from pywrangler.util.testing.util import concretize_abstract_wrangler
 
 
 def test_concretize_abstract_wrangler():
-
     class Dummy(BaseWrangler):
         """Doc"""
 

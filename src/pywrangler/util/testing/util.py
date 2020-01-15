@@ -1,7 +1,3 @@
-"""This module contains testing utility.
-
-"""
-
 from typing import Type
 
 

@@ -150,8 +150,7 @@ def pretty_file_size(size: float, precision: int = 2, align: str = ">",
             return template.format(size=size, unit=unit, **kwargs)
         size /= 1024.0
 
-    else:
-        return template.format(size=size, unit='Yi', **kwargs)
+    return template.format(size=size, unit='Yi', **kwargs)
 
 
 def pretty_time_duration(seconds: float, precision: int = 1, align: str = ">",
