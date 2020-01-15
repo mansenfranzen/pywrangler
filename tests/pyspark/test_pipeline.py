@@ -5,11 +5,12 @@ isort:skip_file
 
 import pytest
 
+from pywrangler.util.testing.util import concretize_abstract_wrangler
+
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
 from pyspark.sql import functions as F
-from pywrangler.util.testing import concretize_abstract_wrangler
 from pywrangler.pyspark import pipeline
 from pywrangler.pyspark.pipeline import StageTransformerConverter
 from pywrangler.pyspark.base import PySparkSingleNoFit

@@ -11,7 +11,7 @@ import pandas as pd
 ITER_TYPE = Union[List[Any], Tuple[Any], None]
 
 
-def ensure_iterable(values: Any, type: Type = list) -> ITER_TYPE:
+def ensure_iterable(values: Any, seq_type: Type = list) -> ITER_TYPE:
     """For convenience, some parameters may accept a single value (string
     for a column name) or multiple values (list of strings for column
     names). Other functions always require a list or tuple of strings. Hence,
@@ -23,7 +23,7 @@ def ensure_iterable(values: Any, type: Type = list) -> ITER_TYPE:
     ----------
     values: Any
         Input values to be converted to tuples.
-    type: {list, tuple}
+    seq_type: {list, tuple}
         Iterable class to return.
 
     Returns
@@ -38,12 +38,12 @@ def ensure_iterable(values: Any, type: Type = list) -> ITER_TYPE:
 
     # if not iterable, return iterable with single value
     elif not isinstance(values, collections.Iterable):
-        return type([values])
+        return seq_type([values])
 
     # handle exception which are iterable but still count as one value
     elif isinstance(values, (str, pd.DataFrame)):
-        return type([values])
+        return seq_type([values])
 
     # anything else should ok to be converted to tuple/list
     else:
-        return type(values)
+        return seq_type(values)

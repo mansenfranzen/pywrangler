@@ -864,7 +864,8 @@ class PipelineProfiler:
         # sum up all local maxima
         return int(result)
 
-    def _get_rows_and_execution_time(self, df: DataFrame) -> Tuple[int, float]:
+    @staticmethod
+    def _get_rows_and_execution_time(df: DataFrame) -> Tuple[int, float]:
         """Profiles dataframe while calling `count` action and return execution
         time, execution plan stage and number of rows.
 

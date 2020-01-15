@@ -7,7 +7,7 @@ import pytest
 import pandas as pd
 
 from pywrangler.pandas.base import PandasWrangler
-from pywrangler.util.testing import concretize_abstract_wrangler
+from pywrangler.util.testing.util import concretize_abstract_wrangler
 
 pytestmark = pytest.mark.pandas
 

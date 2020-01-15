@@ -9,6 +9,8 @@ import pytest
 import pandas as pd
 import numpy as np
 
+from pywrangler.util.testing.util import concretize_abstract_wrangler
+
 pytestmark = pytest.mark.dask  # noqa: E402
 dask = pytest.importorskip("dask")  # noqa: E402
 
@@ -21,7 +23,6 @@ from pywrangler.dask.benchmark import (
     DaskBaseProfiler
 )
 from pywrangler.dask.base import DaskSingleNoFit
-from pywrangler.util.testing import concretize_abstract_wrangler
 
 
 @pytest.fixture

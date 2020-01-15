@@ -180,7 +180,8 @@ class BaseProfiler:
 
         self.profile(*args, **kwargs).report()
 
-    def _pretty_formatter(self, value: float) -> str:
+    @staticmethod
+    def _pretty_formatter(value: float) -> str:
         """String formatter for human readable output of given input `value`.
         Should be replaced with sensible formatters for file size or time
         duration.
@@ -387,7 +388,8 @@ class MemoryProfiler(BaseProfiler):
         changes = np.diff(self.baselines)
         return float(np.median(changes))
 
-    def _pretty_formatter(self, value: float) -> str:
+    @staticmethod
+    def _pretty_formatter(value: float) -> str:
         """String formatter for human readable output of given input `value`.
 
         Parameters
@@ -510,6 +512,7 @@ class TimeProfiler(BaseProfiler):
 
         return True
 
+    @staticmethod
     def _pretty_formatter(self, value: float) -> str:
         """String formatter for human readable output of given input `value`.
 

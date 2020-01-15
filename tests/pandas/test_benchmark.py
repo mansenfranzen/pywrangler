@@ -15,7 +15,7 @@ from pywrangler.pandas.benchmark import (
     PandasMemoryProfiler,
     PandasTimeProfiler
 )
-from pywrangler.util.testing import concretize_abstract_wrangler
+from pywrangler.util.testing.util import concretize_abstract_wrangler
 
 pytestmark = pytest.mark.pandas
 

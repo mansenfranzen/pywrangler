@@ -7,13 +7,14 @@ import time
 
 import pytest
 
+from pywrangler.util.testing.util import concretize_abstract_wrangler
+
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
 from pywrangler.pyspark.base import PySparkSingleNoFit
 from pywrangler.pyspark.benchmark import PySparkTimeProfiler, \
     PySparkBaseProfiler
-from pywrangler.util.testing import concretize_abstract_wrangler
 
 SLEEP = 0.0001
 
