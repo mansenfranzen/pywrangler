@@ -38,7 +38,62 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         util.validate_columns(df, self.groupby_columns)
         util.validate_empty_df(df)
 
-    def _transform(self, df: pd.DataFrame, transformer: Callable) -> pd.DataFrame:
+    def _drop_duplicated_marker(self, marker_column: pd.Series, start: bool = True):
+        """Modify marker column to keep only first start marker or last end
+        marker.
+
+        Parameters
+        ----------
+        marker_column: pd.Series
+            Values for which duplicated markers will be removed.
+        start: bool, optional
+            Indicate which duplicates should be dropped. If True, only first
+            start marker is kept. If False, only last end marker is kept.
+
+        Returns
+        -------
+        dropped: pd.Series
+
+        """
+
+        valid_values = [self.marker_start, self.marker_end]
+        denoised = marker_column.where(marker_column.isin(valid_values))
+
+        if start:
+            fill = denoised.ffill()
+            marker = 1
+            shift = 1
+        else:
+            fill = denoised.bfill()
+            marker = 2
+            shift = -1
+
+        shifted = fill.shift(shift)
+        shifted_start_only = shifted.where(fill.eq(marker))
+
+        mask_drop = (shifted_start_only == marker_column)
+        dropped = marker_column.where(~mask_drop)
+
+        return dropped
+
+    def _transform(self, values: pd.Series) -> List[int]:
+        """Selects appropriate algorithm depending on identical/different
+        start and end markers.
+
+        """
+
+        if self.marker_start_use_first:
+            values = self._drop_duplicated_marker(values)
+
+        if not self.marker_end_use_first:
+            values = self._drop_duplicated_marker(values, False)
+
+        if self._identical_start_end_markers:
+            return self._agg_identical_start_end_markers(values)
+        else:
+            return self._last_start_first_end(values)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Extract interval ids from given dataframe.
 
         Parameters
@@ -60,7 +115,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         df_grouped = util.groupby(df_ordered, self.groupby_columns)
 
         df_result = df_grouped[self.marker_column] \
-            .transform(transformer) \
+            .transform(self._transform) \
             .astype(int) \
             .reindex(df.index) \
             .to_frame(self.target_column_name)
@@ -76,32 +131,6 @@ class NaiveIterator(_BaseIntervalIdentifier):
     remembering the state of start and end markers.
 
     """
-
-    def transform(self, df: pd.DataFrame) -> List[int]:
-        """Selects appropriate algorithm depending on identical/different
-        start and end markers.
-
-        """
-
-        start_first = self.marker_start_use_first
-        end_first = self.marker_end_use_first
-
-        if self._identical_start_end_markers:
-            transformer = self._agg_identical_start_end_markers
-
-        elif ~start_first & end_first:
-            transformer = self._last_start_first_end
-
-        elif start_first & ~end_first:
-            raise NotImplementedError
-
-        elif start_first & end_first:
-            raise NotImplementedError
-
-        else:
-            raise NotImplementedError
-
-        return self._transform(df, transformer)
 
     def _is_start(self, value):
         return value == self.marker_start
@@ -206,28 +235,6 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
     cumulative sum allows enumeration of intervals to avoid looping.
 
     """
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        start_first = self.marker_start_use_first
-        end_first = self.marker_end_use_first
-
-        if self._identical_start_end_markers:
-            transformer = self._agg_identical_start_end_markers
-
-        elif ~start_first & end_first:
-            transformer = self._last_start_first_end
-
-        elif start_first & ~end_first:
-            raise NotImplementedError
-
-        elif start_first & end_first:
-            raise NotImplementedError
-
-        else:
-            raise NotImplementedError
-
-        return self._transform(df, transformer)
 
     def _last_start_first_end(self, series: pd.Series) -> List[int]:
         """Extract shortest intervals from given dataFrame as ids.
