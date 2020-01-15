@@ -24,7 +24,7 @@ class NullValue:
 
     """
 
-    def __str__(self):
+    def __repr__(self):
         return "NULL"
 
     def __lt__(self, other):
@@ -768,13 +768,20 @@ class PlainFrame(_ImmutablePlainFrame):
         elif isinstance(subset, (list, tuple)):
             columns = subset
         elif isinstance(subset, slice):
-            start = subset.start
-            stop = subset.stop
+            idx_start = subset.start
+            idx_stop = subset.stop
 
-            idx_start = self.columns.index(start)
-            idx_stop = self.columns.index(stop)
+            if idx_start is None:
+                idx_start = 0
+            elif not isinstance(idx_start, int):
+                idx_start = self.columns.index(idx_start)
 
-            columns = self.columns[idx_start:idx_stop + 1]
+            if idx_stop is None:
+                idx_stop = len(self.columns)
+            elif not isinstance(idx_stop, int):
+                idx_stop = self.columns.index(idx_stop)+1
+
+            columns = self.columns[idx_start:idx_stop]
         else:
             raise ValueError("Subsetting requires str, list, tuple or slice. "
                              "However, {} was encountered."
@@ -1218,7 +1225,7 @@ class ConverterFromPandas:
 
 class ConverterToPandas:
     """Collection of pandas conversion methods as a composite of
-    PlainColumn. It handles pandas specifics likes the missing distinction
+    PlainColumn. It handles pandas specifics like the missing distinction
     between NULL and NaN.
 
     """
