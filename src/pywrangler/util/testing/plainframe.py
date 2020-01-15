@@ -359,7 +359,6 @@ class PlainFrame(_ImmutablePlainFrame):
 
         """
 
-        from pyspark.sql import SparkSession
         from pyspark.sql import types
 
         converted = [column.to_pyspark() for column in
@@ -369,7 +368,13 @@ class PlainFrame(_ImmutablePlainFrame):
         data = list(zip(*values))
         schema = types.StructType(fields)
 
-        spark = SparkSession.builder.getOrCreate()
+        try:
+            from pywrangler.util.testing import TEST_VARS
+            spark = TEST_VARS["spark_session"]
+        except KeyError:
+            from pyspark.sql import SparkSession
+            spark = SparkSession.builder.getOrCreate()
+
         return spark.createDataFrame(data=data, schema=schema)
 
     def _validate_plaincolumns(self):
