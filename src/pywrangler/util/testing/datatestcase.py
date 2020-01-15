@@ -69,7 +69,8 @@ class EngineTester:
 
     def pandas(self, test_func: Callable,
                test_kwargs: Optional[Dict[str, Any]] = None,
-               merge_input: Optional[bool] = False):
+               merge_input: Optional[bool] = False,
+               force_dtypes: Optional[Dict[str, str]] = None):
         """Assert test data input/output equality for a given test function.
         Input  data is passed to the test function and the result is compared
         to output data.
@@ -98,6 +99,10 @@ class EngineTester:
         merge_input: bool, optional
             Merge input dataframe to the computed result of the test function
             (inner join on index).
+        force_dtypes: dict, optional
+            Enforce specific dtypes for the returned result of the pandas
+            test function. This may be necessary due to float casts when NaN
+            values are present.
 
         Raises
         ------
@@ -105,7 +110,9 @@ class EngineTester:
 
         """
 
-        output_func = partial(self._pandas_output, merge_input=merge_input)
+        output_func = partial(self._pandas_output,
+                              merge_input=merge_input,
+                              force_dtypes=force_dtypes)
 
         return self.generic_assert(test_func=test_func,
                                    test_kwargs=test_kwargs,
@@ -223,6 +230,7 @@ class EngineTester:
     @staticmethod
     def _pandas_output(pf_input: PlainFrame, test_func: Callable,
                        merge_input: Optional[bool],
+                       force_dtypes: Optional[Dict[str, str]] = None,
                        mutant: Optional[BaseMutant] = None):
         """Helper function to generate computed output of DataTestCase for
         given test function.
@@ -239,6 +247,10 @@ class EngineTester:
             (inner join on index).
         mutant: BaseMutant, optional
             Optional mutant to modify input dataframe.
+        force_dtypes: dict, optional
+            Enforce specific dtypes for the returned result of the pandas
+            test function. This may be necessary due to float casts when NaN
+            values are present.
 
         Returns
         -------
@@ -261,7 +273,8 @@ class EngineTester:
                 df_result = pd.merge(df_input, df_result, left_index=True,
                                      right_index=True, how="inner")
 
-        output_computed = PlainFrame.from_pandas(df_result)
+        output_computed = PlainFrame.from_pandas(df_result,
+                                                 dtypes=force_dtypes)
 
         return output_computed
 
@@ -326,13 +339,7 @@ class TestDataConverter(type):
     """
 
     def __new__(mcl, name, bases, nmspc):
-        mandatory = ("input", "output")
-
-        for mand in mandatory:
-            if mand not in nmspc:
-                raise NotImplementedError("DataTestCase '{}' needs to "
-                                          "implement '{}' method."
-                                          .format(name, mand))
+        mandatory = {"input", "output"}.intersection(nmspc.keys())
 
         wrapped = {key: convert_method(nmspc[key], PlainFrame.from_any)
                    for key in mandatory}
