@@ -3,396 +3,773 @@ wrangler.
 
 """
 
-
-import pandas as pd
-
-RANDOM_STATE = 3
-COLUMNS_STD = ("order", "groupby", "marker")
-COLUMNS_MUL = ("order1", "order2", "groupby1", "groupby2", "marker")
+from pywrangler.util.testing import NaN, NULL, DataTestCase, PlainFrame, \
+    TestCollection
 
 
-def _return_dfs(data, target_column_name, index=None, shuffle=False):
-    """Helper function to return input and output dataframes.
+class _IntervalIdentifierTestCase(DataTestCase):
+
+    marker_start = 1
+    marker_end = 2
+    marker_noise = 0
+    marker_dtype = "int"
+
+    marker_column = "marker"
+    target_column_name = "iid"
+
+    @property
+    def test_dtypes(self):
+        dtypes = ["int"] * len(self.test_columns)
+        dtypes[-2] = self.marker_dtype
+        return dtypes
+
+    @property
+    def test_columns(self):
+        return (self.order_columns +
+                self.groupby_columns +
+                [self.marker_column, self.target_column_name])
+
+    @property
+    def test_kwargs(self):
+        return dict(
+            order_columns=self.order_columns,
+            groupby_columns=self.groupby_columns,
+            marker_column=self.marker_column,
+            ascending=self.ascending,
+            marker_start=self.marker_start,
+            marker_end=self.marker_end,
+            target_column_name=self.target_column_name
+        )
+
+    def input(self):
+        return self.output[:-1]
+
+    def output(self):
+        data = self.data()
+
+        return PlainFrame.from_plain(data=data,
+                                     columns=self.test_columns,
+                                     dtypes=self.test_dtypes)
+
+
+class _SingleOrderGroup(_IntervalIdentifierTestCase):
+    """Resembles test data with integer value and one orderby/groupby column.
 
     """
 
-    # determine the correct column names
-    n_cols = len(data[0])
-    if n_cols == 4:
-        parameter_column_names = COLUMNS_STD
-    elif n_cols == 6:
-        parameter_column_names = COLUMNS_MUL
-    else:
-        raise ValueError("Wrong test data provided.")
+    order_columns = ["order"]
+    groupby_columns = ["groupby"]
+    ascending = [True]
 
-    # create dataframes from input data
-    columns = parameter_column_names + (target_column_name, )
-    df_in = pd.DataFrame(data, columns=columns, index=index)
 
-    if shuffle:
-        df_in = df_in.sample(frac=1, replace=False, random_state=RANDOM_STATE)
+class _SingleOrderGroupReverse(_SingleOrderGroup):
+    """Resembles test data with integer value and one orderby/groupby column
+    and reverse sort order.
 
-    df_out = df_in.pop(target_column_name).to_frame()
+    """
 
-    return df_in, df_out
+    ascending = [False]
 
 
-def no_interval(start, end, noise, target_column_name, shuffle):
+class _SingleOrderGroupFloat(_SingleOrderGroup):
+    """Resembles test data with float values.
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       noise,  0],
-            [3,     1,       noise,  0],
-            [4,     1,       noise,  0]]
+    """
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
+    marker_start = 0.1
+    marker_end = 0.2
+    marker_noise = 0.3
+    marker_dtype = "float"
 
 
-def start_marker_left_open(start, end, noise, target_column_name, shuffle):
+class _SingleOrderGroupString(_SingleOrderGroup):
+    """Resembles test data with string values.
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       noise,  0],
-            [3,     1,       start,  0],
-            [4,     1,       noise,  0]]
+    """
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
+    marker_start = "start"
+    marker_end = "end"
+    marker_noise = "noise"
+    marker_dtype = "str"
 
 
-def end_marker_begins(start, end, noise, target_column_name, shuffle):
+class _MultiOrderGroup(_IntervalIdentifierTestCase):
+    """Resembles test data with integer value and multiple orderby/groupby
+    columns.
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       end,    0],
-            [2,     1,       noise,  0],
-            [3,     1,       start,  1],
-            [4,     1,       end,    1]]
+    """
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
+    order_columns = ["order1", "order2"]
+    groupby_columns = ["groupby1", "groupby2"]
+    ascending = [True, True]
 
 
-def invalid_start(start, end, noise, target_column_name, shuffle):
+class _MultiOrderGroupReverse(_MultiOrderGroup):
+    """Resembles test data with integer value and multiple orderby/groupby
+    columns and reversed order.
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  0],
-            [3,     1,       start,  1],
-            [4,     1,       end,    1],
-            [5,     1,       noise,  0],
-            [6,     1,       start,  2],
-            [7,     1,       end,    2]]
+    """
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
+    ascending = [False, False]
 
 
-def invalid_end(start, end, noise, target_column_name, shuffle):
+class NoInterval(_SingleOrderGroup):
+    def data(self):
+        noise = self.marker_noise
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       end,    1],
-            [4,     1,       end,    0],
-            [5,     1,       noise,  0],
-            [6,     1,       start,  2],
-            [7,     1,       end,    2]]
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       noise,  0],
+                [3,     1,       noise,  0],
+                [4,     1,       noise,  0]]
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
+        return data
 
 
-def single_interval(start, end, noise, target_column_name, shuffle):
+class NoIntervalInvalidStart(_SingleOrderGroup):
+    def data(self):
+        noise = self.marker_noise
+        start = self.marker_start
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       end,    1],
-            [4,     1,       noise,  0]]
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       noise,  0],
+                [3,     1,       start,  0],
+                [4,     1,       noise,  0]]
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
+        return data
 
 
-def starts_with_single_interval(start, end, noise, target_column_name,
-                                shuffle):
+class NoIntervalInvalidEnd(_SingleOrderGroup):
+    def data(self):
+        noise = self.marker_noise
+        end = self.marker_end
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       start,  1],
-            [2,     1,       end,    1],
-            [3,     1,       noise,  0],
-            [4,     1,       noise,  0]]
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       noise,  0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0]]
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
+        return data
 
 
-def ends_with_single_interval(start, end, noise, target_column_name,
-                              shuffle):
+class SingleInterval(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0]]
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       noise,  0],
-            [3,     1,       start,  1],
-            [4,     1,       end,    1]]
+        return data
 
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
 
+class SingleIntervalStartsWith(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  1],
+                [2,     1,       end,    1],
+                [3,     1,       noise,  0],
+                [4,     1,       noise,  0]]
+
+        return data
+
 
-def single_interval_spanning(start, end, noise, target_column_name,
-                             shuffle):
+class SingleIntervalEndsWith(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
 
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       noise,  1],
-            [4,     1,       end,    1],
-            [5,     1,       noise,  0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def multiple_intervals(start, end, noise, target_column_name, shuffle):
-
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       end,    1],
-            [4,     1,       noise,  0],
-            [5,     1,       start,  2],
-            [6,     1,       end,    2],
-            [7,     1,       noise,  0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def multiple_intervals_spanning(start, end, noise, target_column_name,
-                                shuffle):
-
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       end,    1],
-            [4,     1,       noise,  0],
-            [5,     1,       start,  2],
-            [6,     1,       noise,  2],
-            [7,     1,       end,    2],
-            [8,     1,       noise,  0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def multiple_intervals_spanning_unsorted(start, end, noise,
-                                         target_column_name, shuffle):
-
-    # cols:  order, groupby, marker, iid"""
-    data = [[7,     1,       end,    2],
-            [5,     1,       start,  2],
-            [2,     1,       start,  1],
-            [4,     1,       noise,  0],
-            [6,     1,       noise,  2],
-            [1,     1,       noise,  0],
-            [3,     1,       end,    1],
-            [8,     1,       noise,  0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def groupby_single_intervals(start, end, noise, target_column_name, shuffle):
-
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       end,    1],
-            [4,     1,       noise,  0],
-
-            [5,     2,       start,  1],
-            [6,     2,       noise,  1],
-            [7,     2,       end,    1],
-            [8,     2,       noise,  0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def groupby_multiple_intervals(start, end, noise, target_column_name,
-                               shuffle):
-
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       end,    1],
-            [4,     1,       noise,  0],
-
-            [5,     2,       start,  1],
-            [6,     2,       noise,  1],
-            [7,     2,       end,    1],
-            [8,     2,       noise,  0],
-            [9,     2,       noise,  0],
-            [10,    2,       start,  2],
-            [11,    2,       noise,  2],
-            [12,    2,       end,    2],
-            [13,    2,       start,  3],
-            [14,    2,       end,    3]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def groupby_multiple_intervals_reverse(start, end, noise, target_column_name,
-                                       shuffle):
-
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  0],
-            [3,     1,       end,    0],
-            [4,     1,       noise,  0],
-
-            [5,     2,       start,  0],
-            [6,     2,       noise,  0],
-            [7,     2,       end,    2],
-            [8,     2,       noise,  2],
-            [9,     2,       noise,  2],
-            [10,    2,       start,  2],
-            [11,    2,       noise,  0],
-            [12,    2,       end,    1],
-            [13,    2,       start,  1],
-            [14,    2,       end,    0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def groupby_multiple_more_intervals(start, end, noise, target_column_name,
-                                    shuffle):
-
-    # cols:  order, groupby, marker, iid"""
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       end,    1],
-            [4,     1,       noise,  0],
-
-            [5,     2,       start,  1],
-            [6,     2,       noise,  1],
-            [7,     2,       end,    1],
-            [8,     2,       noise,  0],
-            [9,     2,       noise,  0],
-
-            [10,    3,       start,  1],
-            [11,    3,       noise,  1],
-            [12,    3,       end,    1],
-            [13,    3,       start,  2],
-            [14,    3,       end,    2]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def multiple_groupby_order_columns(start, end, noise, target_column_name,
-                                   shuffle):
-    # cols:  order1, order2, groupby1, groupby2, marker, iid"""
-    data = [[1,      1,      1,        1,        noise,  0],
-            [1,      2,      1,        1,        start,  1],
-            [2,      1,      1,        1,        end,    1],
-            [2,      2,      1,        1,        noise,  0],
-
-            [3,      1,      1,        2,        start,  1],
-            [3,      2,      1,        2,        noise,  1],
-            [4,      1,      1,        2,        end,    1],
-            [4,      2,      1,        2,        noise,  0],
-
-            [1,      1,      2,        1,        start,  1],
-            [1,      2,      2,        1,        end,    1],
-            [2,      1,      2,        1,        start,  2],
-            [2,      2,      2,        1,        end,    2],
-
-            [3,      1,      2,        2,        start,  1],
-            [3,      2,      2,        2,        noise,  1],
-            [4,      1,      2,        2,        end,    1],
-            [4,      2,      2,        2,        noise,  0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def multiple_groupby_order_columns_reverse(start, end, noise,
-                                           target_column_name, shuffle):
-    # cols:  order1, order2, groupby1, groupby2, marker, iid"""
-    data = [[1,      1,      1,        1,        end,    2],
-            [1,      2,      1,        1,        start,  2],
-            [2,      1,      1,        1,        end,    1],
-            [2,      2,      1,        1,        start,  1],
-
-            [3,      1,      1,        2,        start,  0],
-            [3,      2,      1,        2,        end,    1],
-            [4,      1,      1,        2,        noise,  1],
-            [4,      2,      1,        2,        start,  1],
-
-            [1,      1,      2,        1,        start,  0],
-            [1,      2,      2,        1,        end,    1],
-            [2,      1,      2,        1,        start,  1],
-            [2,      2,      2,        1,        end,    0],
-
-            [3,      1,      2,        2,        start,  0],
-            [3,      2,      2,        2,        noise,  0],
-            [4,      1,      2,        2,        end,    0],
-            [4,      2,      2,        2,        noise,  0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def multiple_groupby_order_columns_with_invalids(start, end, noise,
-                                                 target_column_name, shuffle):
-    # cols:  order1, order2, groupby1, groupby2, marker, iid"""
-    data = [[1,      1,      1,        1,        start,  0],
-            [1,      2,      1,        1,        start,  1],
-            [2,      1,      1,        1,        end,    1],
-            [2,      2,      1,        1,        noise,  0],
-
-            [3,      1,      1,        2,        start,  1],
-            [3,      2,      1,        2,        noise,  1],
-            [4,      1,      1,        2,        end,    1],
-            [4,      2,      1,        2,        end,    0],
-
-            [5,      1,      1,        2,        start,  0],
-            [5,      2,      1,        2,        start,  0],
-            [5,      3,      1,        2,        start,  2],
-            [5,      4,      1,        2,        end,    2],
-
-            [3,      1,      2,        2,        start,  1],
-            [3,      2,      2,        2,        end,    1],
-            [4,      1,      2,        2,        end,    0],
-            [4,      2,      2,        2,        end,    0]]
-
-    return _return_dfs(data, target_column_name, shuffle=shuffle)
-
-
-def identical_start_end_with_invalids(start, noise, target_column_name):
-    # cols:  order, groupby, marker, iid
-    data = [[1,     1,       noise,  0],
-            [2,     1,       start,  1],
-            [3,     1,       start,  2],
-            [4,     1,       noise,  2],
-
-            [5,     2,       start,  1],
-            [6,     2,       noise,  1],
-            [7,     2,       start,  2],
-            [8,     2,       noise,  2],
-            [9,     2,       noise,  2],
-            [10,    2,       start,  3],
-            [11,    2,       noise,  3],
-            [12,    2,       start,  4],
-            [13,    2,       noise,  4],
-            [14,    2,       start,  5]]
-
-    return _return_dfs(data, target_column_name)
-
-
-def identical_start_end_with_invalids_unsorted(start, noise,
-                                               target_column_name):
-    # cols:  order, groupby, marker, iid
-    data = [[1,     1,       noise,  0],
-            [13,    2,       noise,  4],
-            [3,     1,       start,  2],
-            [8,     2,       noise,  2],
-            [7,     2,       start,  2],
-            [4,     1,       noise,  2],
-            [5,     2,       start,  1],
-            [6,     2,       noise,  1],
-            [9,     2,       noise,  2],
-            [10,    2,       start,  3],
-            [2,     1,       start,  1],
-            [11,    2,       noise,  3],
-            [12,    2,       start,  4],
-            [14,    2,       start,  5]]
-
-    return _return_dfs(data, target_column_name)
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       noise,  0],
+                [3,     1,       start,  1],
+                [4,     1,       end,    1]]
+
+        return data
+
+
+class SingleIntervalSpanning(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       noise,  1],
+                [4,     1,       end,    1],
+                [5,     1,       noise,  0]]
+
+        return data
+
+
+class SingleIntervalSpanningGroupby(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       noise,  1],
+                [4,     1,       end,    1],
+                [5,     1,       noise,  0],
+                [6,     2,       noise,  0],
+                [7,     2,       noise,  0],
+                [8,     2,       noise,  0]]
+
+        return data
+
+
+class SingleIntervalUnsorted(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[4,     1,       end,    1],
+                [3,     1,       noise,  1],
+                [2,     1,       start,  1],
+                [5,     1,       noise,  0],
+                [1,     1,       noise,  0]]
+
+        return data
+
+
+class SingleIntervalMissings(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       NULL,   0],
+                [2,     1,       start,  1],
+                [3,     1,       NULL,   1],
+                [4,     1,       end,    1],
+                [5,     1,       NULL,   0]]
+
+        return data
+
+
+class MultipleIntervals(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  2],
+                [6,     1,       end,    2],
+                [7,     1,       noise,  0]]
+
+        return data
+
+
+class MultipleIntervalsReverse(_SingleOrderGroupReverse):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       end,    2],
+                [3,     1,       start,  2],
+                [4,     1,       end,    1],
+                [5,     1,       noise,  1],
+                [6,     1,       start,  1],
+                [7,     1,       noise,  0]]
+
+        return data
+
+
+class MultipleIntervalsSpanning(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  2],
+                [6,     1,       noise,  2],
+                [7,     1,       end,    2],
+                [8,     1,       noise,  0]]
+
+        return data
+
+
+class MultipleIntervalsSpanningFloat(MultipleIntervalsSpanning,
+                                     _SingleOrderGroupFloat):
+    pass
+
+
+class MultipleIntervalsSpanningFloatNAN(MultipleIntervalsSpanning,
+                                        _SingleOrderGroupFloat):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       NaN,    0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       NaN,    0],
+                [5,     1,       start,  2],
+                [6,     1,       NaN,    2],
+                [7,     1,       end,    2],
+                [8,     1,       noise,  0]]
+
+        return data
+
+
+class MultipleIntervalsSpanningString(MultipleIntervalsSpanning,
+                                      _SingleOrderGroupString):
+    pass
+
+
+class MultipleIntervalsSpanningGroupby(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0],
+                [5,     2,       start,  1],
+                [6,     2,       noise,  1],
+                [7,     2,       end,    1],
+                [8,     2,       noise,  0]]
+
+        return data
+
+
+class MultipleIntervalsSpanningGroupbyExtended(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0],
+
+                [5,     2,       start,  1],
+                [6,     2,       noise,  1],
+                [7,     2,       end,    1],
+                [8,     2,       noise,  0],
+                [9,     2,       noise,  0],
+                [10,    2,       start,  2],
+                [11,    2,       noise,  2],
+                [12,    2,       end,    2],
+                [13,    2,       start,  3],
+                [14,    2,       end,    3]]
+
+        return data
+
+
+class MultipleIntervalsSpanningGroupbyExtendedTriple(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0],
+
+                [5,     2,       start,  1],
+                [6,     2,       noise,  1],
+                [7,     2,       end,    1],
+                [8,     2,       noise,  0],
+                [9,     2,       noise,  0],
+
+                [10,    3,       start,  1],
+                [11,    3,       noise,  1],
+                [12,    3,       end,    1],
+                [13,    3,       start,  2],
+                [14,    3,       end,    2]]
+
+        return data
+
+
+class MultipleIntervalsUnsorted(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[6,     1,       noise,  2],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0],
+                [8,     1,       noise,  0],
+                [1,     1,       noise,  0],
+                [7,     1,       end,    2],
+                [2,     1,       start,  1],
+                [5,     1,       start,  2]]
+
+        return data
+
+
+class MultipleIntervalsMissing(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       NULL,   0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  2],
+                [6,     1,       end,    2],
+                [7,     1,       NULL,   0]]
+
+        return data
+
+
+class InvalidStartsWithEnd(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  1],
+                [6,     1,       end,    1]]
+
+        return data
+
+
+class InvalidEndsWithStart(_SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       start,  0],
+                [5,     1,       start,  0],
+                [6,     1,       start,  0]]
+
+        return data
+
+
+class MultipleOrderGroupby(_MultiOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order1, order2, groupby1, groupby2, marker, iid"""
+        data = [[1,      1,      1,        1,        noise,  0],
+                [1,      2,      1,        1,        start,  1],
+                [2,      1,      1,        1,        end,    1],
+                [2,      2,      1,        1,        noise,  0],
+
+                [3,      1,      1,        2,        start,  1],
+                [3,      2,      1,        2,        noise,  1],
+                [4,      1,      1,        2,        end,    1],
+                [4,      2,      1,        2,        noise,  0],
+
+                [1,      1,      2,        1,        start,  1],
+                [1,      2,      2,        1,        end,    1],
+                [2,      1,      2,        1,        start,  2],
+                [2,      2,      2,        1,        end,    2],
+
+                [3,      1,      2,        2,        start,  1],
+                [3,      2,      2,        2,        noise,  1],
+                [4,      1,      2,        2,        end,    1],
+                [4,      2,      2,        2,        noise,  0]]
+
+        return data
+
+
+class MultipleOrderGroupbyReverse(_MultiOrderGroupReverse):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order1, order2, groupby1, groupby2, marker, iid"""
+        data = [[1,      1,      1,        1,        end,    2],
+                [1,      2,      1,        1,        start,  2],
+                [2,      1,      1,        1,        end,    1],
+                [2,      2,      1,        1,        start,  1],
+
+                [3,      1,      1,        2,        start,  0],
+                [3,      2,      1,        2,        end,    1],
+                [4,      1,      1,        2,        noise,  1],
+                [4,      2,      1,        2,        start,  1],
+
+                [1,      1,      2,        1,        start,  0],
+                [1,      2,      2,        1,        end,    1],
+                [2,      1,      2,        1,        start,  1],
+                [2,      2,      2,        1,        end,    0],
+
+                [3,      1,      2,        2,        start,  0],
+                [3,      2,      2,        2,        noise,  0],
+                [4,      1,      2,        2,        end,    0],
+                [4,      2,      2,        2,        noise,  0]]
+
+        return data
+
+
+class MultipleOrderGroupbyMissing(_MultiOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order1, order2, groupby1, groupby2, marker, iid"""
+        data = [[1,      1,      1,        1,        NULL,   0],
+                [1,      2,      1,        1,        start,  1],
+                [2,      1,      1,        1,        end,    1],
+                [2,      2,      1,        1,        noise,  0],
+
+                [3,      1,      1,        2,        start,  1],
+                [3,      2,      1,        2,        noise,  1],
+                [4,      1,      1,        2,        end,    1],
+                [4,      2,      1,        2,        NULL,   0],
+
+                [5,      1,      1,        2,        noise,  0],
+                [5,      2,      1,        2,        NULL,   0],
+                [5,      3,      1,        2,        start,  2],
+                [5,      4,      1,        2,        end,    2],
+
+                [3,      1,      2,        2,        start,  1],
+                [3,      2,      2,        2,        end,    1],
+                [4,      1,      2,        2,        NULL,   0],
+                [4,      2,      2,        2,        noise,  0]]
+
+        return data
+
+
+class MultipleOrderGroupbyMissingUnsorted(_MultiOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order1, order2, groupby1, groupby2, marker, iid"""
+        data = [[1,      1,      1,        1,        NULL,   0],
+                [4,      1,      1,        2,        end,    1],
+                [5,      3,      1,        2,        start,  2],
+                [3,      1,      2,        2,        start,  1],
+                [2,      1,      1,        1,        end,    1],
+                [3,      1,      1,        2,        start,  1],
+                [5,      1,      1,        2,        noise,  0],
+                [3,      2,      1,        2,        noise,  1],
+                [1,      2,      1,        1,        start,  1],
+                [4,      2,      1,        2,        NULL,   0],
+                [2,      2,      1,        1,        noise,  0],
+                [5,      2,      1,        2,        NULL,   0],
+                [4,      1,      2,        2,        NULL,   0],
+                [5,      4,      1,        2,        end,    2],
+                [3,      2,      2,        2,        end,    1],
+                [4,      2,      2,        2,        noise,  0]]
+
+        return data
+
+
+BaseTests = TestCollection([
+    NoInterval,
+    NoIntervalInvalidStart,
+    NoIntervalInvalidEnd,
+    SingleInterval,
+    SingleIntervalStartsWith,
+    SingleIntervalEndsWith,
+    SingleIntervalSpanning,
+    SingleIntervalSpanningGroupby,
+    SingleIntervalUnsorted,
+    SingleIntervalMissings,
+    MultipleIntervals,
+    MultipleIntervalsReverse,
+    MultipleIntervalsSpanning,
+    MultipleIntervalsSpanningFloat,
+    MultipleIntervalsSpanningFloatNAN,
+    MultipleIntervalsSpanningString,
+    MultipleIntervalsSpanningGroupby,
+    MultipleIntervalsSpanningGroupbyExtended,
+    MultipleIntervalsSpanningGroupbyExtendedTriple,
+    MultipleIntervalsUnsorted,
+    MultipleIntervalsMissing,
+    InvalidStartsWithEnd,
+    InvalidEndsWithStart,
+    MultipleOrderGroupby,
+    MultipleOrderGroupbyReverse,
+    MultipleOrderGroupbyMissing,
+    MultipleOrderGroupbyMissingUnsorted
+])
+
+
+class _IdenticalStartEnd:
+    marker_start = 1
+    marker_end = 1
+
+
+class IdenticalStartEndSingleInterval(_IdenticalStartEnd, _SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       noise,  1],
+                [4,     1,       noise,  1]]
+
+        return data
+
+
+class IdenticalStartEndMultipleInterval(_IdenticalStartEnd, _SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       noise,  1],
+                [4,     1,       start,  2],
+                [5,     1,       noise,  2],
+                [6,     1,       start,  3],
+                [7,     1,       noise,  3],
+                [8,     1,       noise,  3]]
+
+        return data
+
+
+class IdenticalStartEndMultipleIntervalReversed(_IdenticalStartEnd,
+                                                _SingleOrderGroupReverse):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       noise,  3],
+                [2,     1,       start,  3],
+                [3,     1,       noise,  2],
+                [4,     1,       start,  2],
+                [5,     1,       noise,  1],
+                [6,     1,       start,  1],
+                [7,     1,       noise,  0],
+                [8,     1,       noise,  0]]
+
+        return data
+
+
+class IdenticalStartEndMultipleIntervalMissing(_IdenticalStartEnd,
+                                               _SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       NULL,   0],
+                [2,     1,       start,  1],
+                [3,     1,       noise,  1],
+                [4,     1,       start,  2],
+                [5,     1,       NULL,   2],
+                [6,     1,       start,  3],
+                [7,     1,       noise,  3],
+                [8,     1,       NULL,   3]]
+
+        return data
+
+
+class IdenticalStartEndMultipleIntervalMissingUnsorted(_IdenticalStartEnd,
+                                                       _SingleOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+
+        # cols:  order, groupby, marker, iid
+        data = [[5,     1,       NULL,   2],
+                [2,     1,       start,  1],
+                [6,     1,       start,  3],
+                [4,     1,       start,  2],
+                [8,     1,       NULL,   3],
+                [1,     1,       NULL,   0],
+                [3,     1,       noise,  1],
+                [7,     1,       noise,  3]]
+
+        return data
+
+
+class IdenticalStartEndMultipleOrderGroupbyMissing(_IdenticalStartEnd,
+                                                   _MultiOrderGroup):
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+
+        # cols:  order1, order2, groupby1, groupby2, marker, iid"""
+        data = [[1,      1,      1,        1,        NULL,   0],
+                [1,      2,      1,        1,        start,  1],
+                [2,      1,      1,        1,        NULL,   1],
+                [2,      2,      1,        1,        noise,  1],
+
+                [3,      1,      1,        2,        start,  1],
+                [3,      2,      1,        2,        noise,  1],
+                [4,      1,      1,        2,        start,  2],
+                [4,      2,      1,        2,        NULL,   2],
+
+                [5,      1,      1,        2,        noise,  2],
+                [5,      2,      1,        2,        NULL,   2],
+                [5,      3,      1,        2,        start,  3],
+                [5,      4,      1,        2,        noise,  3],
+
+                [3,      1,      2,        2,        start,  1],
+                [3,      2,      2,        2,        start,  2],
+                [4,      1,      2,        2,        NULL,   2],
+                [4,      2,      2,        2,        noise,  2]]
+
+        return data
+
+
+IdenticalStartEndTests = TestCollection([
+    IdenticalStartEndSingleInterval,
+    IdenticalStartEndMultipleInterval,
+    IdenticalStartEndMultipleIntervalReversed,
+    IdenticalStartEndMultipleIntervalMissing,
+    IdenticalStartEndMultipleIntervalMissingUnsorted,
+    IdenticalStartEndMultipleOrderGroupbyMissing
+])
