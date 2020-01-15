@@ -8,12 +8,18 @@ pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
 
 from tests.test_data.interval_identifier import (
-    BaseTests,
-    IdenticalStartEndTests
+    CollectionGeneral,
+    CollectionIdenticalStartEnd,
+    CollectionFirstStartFirstEnd,
+    CollectionFirstStartLastEnd,
+    CollectionLastStartFirstEnd,
+    CollectionLastStartLastEnd,
+    MultipleIntervalsSpanningGroupbyExtendedTriple,
+    MARKER_USE,
+    MARKER_USE_KWARGS
 )
 
 from pywrangler.pyspark.wranglers.interval_identifier import VectorizedCumSum
-
 
 WRANGLER = (VectorizedCumSum,)
 WRANGLER_IDS = [x.__name__ for x in WRANGLER]
@@ -21,24 +27,55 @@ WRANGLER_KWARGS = dict(argnames='wrangler',
                        argvalues=WRANGLER,
                        ids=WRANGLER_IDS)
 
-REPARTITION_KWARGS = dict(argnames='repartition',
-                          argvalues=(None, 3))
 
-
-@pytest.mark.parametrize(**REPARTITION_KWARGS)
+@pytest.mark.parametrize(**MARKER_USE_KWARGS)
 @pytest.mark.parametrize(**WRANGLER_KWARGS)
-@BaseTests.pytest_parametrize
-def test_base(testcase, wrangler, repartition):
-    """Tests against all available wranglers and test cases .
+@CollectionGeneral.pytest_parametrize
+def test_base(testcase, wrangler, marker_use, spark):
+    """Tests against all available wranglers and test cases.
+
     Parameters
     ----------
-    test_case: function
+    testcase: DataTestCase
         Generates test data for given test case.
     wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
         Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
-    repartition: None, int
-        Define repartition for input dataframe.
+    marker_use: dict
+        Defines the marker start/end use.
+    spark: pyspark.sql.SparkSession
+
     """
+
+    from pywrangler.util.testing import TEST_VARS
+    TEST_VARS["spark_session"] = spark
+
+    # instantiate test case
+    testcase_instance = testcase("pyspark")
+
+    # instantiate wrangler
+    wrangler_instance = wrangler(**testcase_instance.test_kwargs, **marker_use)
+
+    # pass wrangler to test case
+    testcase_instance.test(wrangler_instance.transform)
+
+
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+@CollectionIdenticalStartEnd.pytest_parametrize
+def test_identical_start_end(testcase, wrangler, spark):
+    """Tests against all available wranglers and test cases.
+
+    Parameters
+    ----------
+    testcase: DataTestCase
+        Generates test data for given test case.
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+    spark: pyspark.sql.SparkSession
+
+    """
+
+    from pywrangler.util.testing import TEST_VARS
+    TEST_VARS["spark_session"] = spark
 
     # instantiate test case
     testcase_instance = testcase("pyspark")
@@ -47,31 +84,148 @@ def test_base(testcase, wrangler, repartition):
     wrangler_instance = wrangler(**testcase_instance.test_kwargs)
 
     # pass wrangler to test case
-    kwargs = dict(repartition=repartition)
-    testcase_instance.test(wrangler_instance.transform, **kwargs)
+    testcase_instance.test(wrangler_instance.transform)
 
 
-@pytest.mark.parametrize(**REPARTITION_KWARGS)
 @pytest.mark.parametrize(**WRANGLER_KWARGS)
-@IdenticalStartEndTests.pytest_parametrize
-def test_identical_start_end(testcase, wrangler,repartition):
-    """Tests against all available wranglers and test cases .
+@CollectionFirstStartFirstEnd.pytest_parametrize
+def test_first_start_first_end(testcase, wrangler, spark):
+    """Tests against all available wranglers and test cases.
+
     Parameters
     ----------
-    test_case: function
+    testcase: DataTestCase
         Generates test data for given test case.
     wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
         Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
-    repartition: None, int
-        Define repartition for input dataframe.
+    spark: pyspark.sql.SparkSession
+
     """
+
+    from pywrangler.util.testing import TEST_VARS
+    TEST_VARS["spark_session"] = spark
 
     # instantiate test case
     testcase_instance = testcase("pyspark")
 
     # instantiate wrangler
-    wrangler_instance = wrangler(**testcase_instance.test_kwargs)
+    marker_use = MARKER_USE["FirstStartFirstEnd"]
+    wrangler_instance = wrangler(**testcase_instance.test_kwargs, **marker_use)
 
     # pass wrangler to test case
-    kwargs = dict(repartition=repartition)
-    testcase_instance.test(wrangler_instance.transform, **kwargs)
+    testcase_instance.test(wrangler_instance.transform)
+
+
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+@CollectionFirstStartLastEnd.pytest_parametrize
+def test_first_start_last_end(testcase, wrangler, spark):
+    """Tests against all available wranglers and test cases.
+
+    Parameters
+    ----------
+    testcase: DataTestCase
+        Generates test data for given test case.
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+    spark: pyspark.sql.SparkSession
+
+    """
+
+    from pywrangler.util.testing import TEST_VARS
+    TEST_VARS["spark_session"] = spark
+
+    # instantiate test case
+    testcase_instance = testcase("pyspark")
+
+    # instantiate wrangler
+    marker_use = MARKER_USE["FirstStartLastEnd"]
+    wrangler_instance = wrangler(**testcase_instance.test_kwargs, **marker_use)
+
+    # pass wrangler to test case
+    testcase_instance.test(wrangler_instance.transform)
+
+
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+@CollectionLastStartFirstEnd.pytest_parametrize
+def test_last_start_first_end(testcase, wrangler, spark):
+    """Tests against all available wranglers and test cases.
+
+    Parameters
+    ----------
+    testcase: DataTestCase
+        Generates test data for given test case.
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+    spark: pyspark.sql.SparkSession
+
+    """
+
+    from pywrangler.util.testing import TEST_VARS
+    TEST_VARS["spark_session"] = spark
+
+    # instantiate test case
+    testcase_instance = testcase("pyspark")
+
+    # instantiate wrangler
+    marker_use = MARKER_USE["LastStartFirstEnd"]
+    wrangler_instance = wrangler(**testcase_instance.test_kwargs, **marker_use)
+
+    # pass wrangler to test case
+    testcase_instance.test(wrangler_instance.transform)
+
+
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+@CollectionLastStartLastEnd.pytest_parametrize
+def test_last_start_last_end(testcase, wrangler, spark):
+    """Tests against all available wranglers and test cases.
+
+    Parameters
+    ----------
+    testcase: DataTestCase
+        Generates test data for given test case.
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+    spark: pyspark.sql.SparkSession
+
+    """
+
+    from pywrangler.util.testing import TEST_VARS
+    TEST_VARS["spark_session"] = spark
+
+    # instantiate test case
+    testcase_instance = testcase("pyspark")
+
+    # instantiate wrangler
+    marker_use = MARKER_USE["LastStartLastEnd"]
+    wrangler_instance = wrangler(**testcase_instance.test_kwargs, **marker_use)
+
+    # pass wrangler to test case
+    testcase_instance.test(wrangler_instance.transform)
+
+
+@pytest.mark.parametrize(**MARKER_USE_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_repartition(wrangler, marker_use, spark):
+    """Tests that repartition has no effect.
+
+    Parameters
+    ----------
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+    marker_use: dict
+        Defines the marker start/end use.
+    spark: pyspark.sql.SparkSession
+
+    """
+
+    from pywrangler.util.testing import TEST_VARS
+    TEST_VARS["spark_session"] = spark
+
+    # instantiate test case
+    testcase_instance = MultipleIntervalsSpanningGroupbyExtendedTriple()
+
+    # instantiate wrangler
+    wrangler_instance = wrangler(**testcase_instance.test_kwargs, **marker_use)
+
+    # pass wrangler to test case
+    testcase_instance.test.pyspark(wrangler_instance.transform, repartition=5)

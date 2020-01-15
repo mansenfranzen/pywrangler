@@ -7,6 +7,20 @@ from pywrangler.util.testing import NaN, NULL, DataTestCase, PlainFrame, \
     TestCollection
 
 
+MARKER_USE = {"FirstStartFirstEnd": {"marker_start_use_first": True,
+                                    "marker_end_use_first": True},
+             "FirstStartLastEnd": {"marker_start_use_first": True,
+                                   "marker_end_use_first": False},
+             "LastStartLastEnd": {"marker_start_use_first": False,
+                                  "marker_end_use_first": False},
+             "LastStartFirstEnd": {"marker_start_use_first": False,
+                                   "marker_end_use_first": True}}
+
+MARKER_USE_KWARGS = dict(argnames="marker_use",
+                         argvalues=list(MARKER_USE.values()),
+                         ids=list(MARKER_USE.keys()))
+
+
 class _IntervalIdentifierTestCase(DataTestCase):
 
     marker_start = 1
@@ -610,7 +624,7 @@ class MultipleOrderGroupbyMissingUnsorted(_MultiOrderGroup):
         return data
 
 
-BaseTests = TestCollection([
+CollectionGeneral = TestCollection([
     NoInterval,
     NoIntervalInvalidStart,
     NoIntervalInvalidEnd,
@@ -765,7 +779,7 @@ class IdenticalStartEndMultipleOrderGroupbyMissing(_IdenticalStartEnd,
         return data
 
 
-IdenticalStartEndTests = TestCollection([
+CollectionIdenticalStartEnd = TestCollection([
     IdenticalStartEndSingleInterval,
     IdenticalStartEndMultipleInterval,
     IdenticalStartEndMultipleIntervalReversed,
@@ -775,201 +789,397 @@ IdenticalStartEndTests = TestCollection([
 ])
 
 
+class FirstStartFirstEndValid(_SingleOrderGroup):
 
-def first_start_first_end_end_begins(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        end,     0],
-            [2,      1,        noise,   0],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [5,      1,        noise,   1],
-            [6,      1,        noise,   1],
-            [7,      1,        end,     1],
-            [8,      1,        end,     0],
-            [9,      1,        start,   2],
-            [10,     1,        start,   2],
-            [11,     1,        start,   2],
-            [12,     1,        noise,   2],
-            [13,     1,        end,     2],
-            [14,     1,        start,   3],
-            [15,     1,        noise,   3],
-            [16,     1,        end,     3],
-            [17,     1,        end,     0],
-            [18,     1,        end,     0]]
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
 
-    return _return_dfs(data, target_column_name)
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  1],
+                [2,     1,       start,  1],
+                [3,     1,       start,  1],
+                [4,     1,       noise,  1],
+                [5,     1,       start,  1],
+                [6,     1,       noise,  1],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  0],
+                [11,    1,       end,    0],
+                [12,    1,       noise,  0],
+                [13,    1,       end,    0],
+                [14,    1,       end,    0],
+                [15,    1,       end,    0]]
 
-
-def first_start_first_end_start_begins(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        start,   1],
-            [2,      1,        noise,   1],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [5,      1,        noise,   1],
-            [6,      1,        noise,   1],
-            [7,      1,        end,     1],
-            [8,      1,        end,     0],
-            [9,      1,        start,   2],
-            [10,     1,        start,   2],
-            [11,     1,        start,   2],
-            [12,     1,        noise,   2],
-            [13,     1,        end,     2],
-            [14,     1,        start,   3],
-            [15,     1,        noise,   3],
-            [16,     1,        end,     3],
-            [17,     1,        end,     0],
-            [18,     1,        end,     0]]
-
-    return _return_dfs(data, target_column_name)
+        return data
 
 
-def first_start_first_end_multiple_groupby(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        start,   1],
-            [2,      1,        noise,   1],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [5,      1,        end,     1],
-            [6,      1,        noise,   0],
-            [7,      1,        start,   2],
-            [8,      1,        end,     2],
-            [9,      1,        start,   0],
-            [1,      2,        start,   1],
-            [2,      2,        start,   1],
-            [3,      2,        noise,   1],
-            [4,      2,        end,     1],
-            [5,      2,        start,   2],
-            [6,      2,        noise,   2],
-            [7,      2,        end,     2],
-            [8,      2,        end,     0],
-            [9,      2,        end,     0],
-            [10,     2,        start,   0]]
+class FirstStartFirstEndInvalid(_SingleOrderGroup):
 
-    return _return_dfs(data, target_column_name)
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
 
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       noise,  1],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       noise,  0],
+                [15,    1,       end,    0],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
 
-def first_start_first_end_multiple_groupby_unsorted(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        start,   1],
-            [2,      1,        noise,   1],
-            [8,      2,        end,     0],
-            [9,      2,        end,     0],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [1,      2,        start,   1],
-            [2,      2,        start,   1],
-            [3,      2,        noise,   1],
-            [4,      2,        end,     1],
-            [5,      2,        start,   2],
-            [6,      1,        noise,   0],
-            [8,      1,        end,     2],
-            [9,      1,        start,   0],
-            [7,      1,        start,   2],
-            [6,      2,        noise,   2],
-            [7,      2,        end,     2],
-            [5,      1,        end,     1],
-            [10,     2,        start,   0]]
-
-    return _return_dfs(data, target_column_name)
+        return data
 
 
-def last_start_last_end_end_begins(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        end,     0],
-            [2,      1,        noise,   0],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [5,      1,        noise,   1],
-            [6,      1,        noise,   1],
-            [7,      1,        end,     1],
-            [8,      1,        end,     1],
-            [9,      1,        start,   0],
-            [10,     1,        start,   0],
-            [11,     1,        start,   2],
-            [12,     1,        noise,   2],
-            [13,     1,        end,     2],
-            [14,     1,        start,   3],
-            [15,     1,        noise,   3],
-            [16,     1,        end,     3],
-            [17,     1,        end,     3],
-            [18,     1,        end,     3]]
+class FirstStartFirstEndInvalidMissing(_SingleOrderGroup):
 
-    return _return_dfs(data, target_column_name)
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
 
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       NULL,   1],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       NULL,   0],
+                [15,    1,       end,    0],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
 
-def last_start_last_end_start_begins(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        start,   0],
-            [2,      1,        noise,   0],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [5,      1,        end,     1],
-            [6,      1,        noise,   0],
-            [7,      1,        start,   2],
-            [8,      1,        end,     2],
-            [9,      1,        start,   0],
-            [10,     1,        start,   0],
-            [11,     1,        start,   3],
-            [12,     1,        noise,   3],
-            [13,     1,        end,     3],
-            [14,     1,        start,   4],
-            [15,     1,        noise,   4],
-            [16,     1,        end,     4],
-            [17,     1,        end,     4],
-            [18,     1,        end,     4],
-            [19,     1,        start,   0]]
-
-    return _return_dfs(data, target_column_name)
+        return data
 
 
-def first_start_last_end_end_begins(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        end,     0],
-            [2,      1,        noise,   0],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [5,      1,        noise,   1],
-            [6,      1,        noise,   1],
-            [7,      1,        end,     1],
-            [8,      1,        end,     1],
-            [9,      1,        start,   2],
-            [10,     1,        start,   2],
-            [11,     1,        start,   2],
-            [12,     1,        noise,   2],
-            [13,     1,        end,     2],
-            [14,     1,        noise,   0],
-            [15,     1,        noise,   0],
-            [16,     1,        start,   3],
-            [17,     1,        noise,   3],
-            [18,     1,        end,     3],
-            [19,     1,        end,     3],
-            [20,     1,        end,     3]]
-
-    return _return_dfs(data, target_column_name)
+CollectionFirstStartFirstEnd = TestCollection([
+    FirstStartFirstEndValid,
+    FirstStartFirstEndInvalid,
+    FirstStartFirstEndInvalidMissing,
+])
 
 
-def first_start_last_end_start_begins(start, end, noise, target_column_name):
-    # cols:  order1, groupby1, marker, iid"""
-    data = [[1,      1,        start,   1],
-            [2,      1,        noise,   1],
-            [3,      1,        start,   1],
-            [4,      1,        noise,   1],
-            [5,      1,        noise,   1],
-            [6,      1,        noise,   1],
-            [7,      1,        end,     1],
-            [8,      1,        end,     1],
-            [9,      1,        start,   2],
-            [10,     1,        start,   2],
-            [11,     1,        start,   2],
-            [12,     1,        noise,   2],
-            [13,     1,        end,     2],
-            [14,     1,        noise,   0],
-            [15,     1,        noise,   0],
-            [16,     1,        start,   3],
-            [17,     1,        noise,   3],
-            [18,     1,        end,     3],
-            [19,     1,        end,     3],
-            [20,     1,        end,     3]]
+class FirstStartLastEndValid(_SingleOrderGroup):
 
-    return _return_dfs(data, target_column_name)
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  1],
+                [2,     1,       start,  1],
+                [3,     1,       start,  1],
+                [4,     1,       noise,  1],
+                [5,     1,       start,  1],
+                [6,     1,       noise,  1],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  1],
+                [11,    1,       end,    1],
+                [12,    1,       noise,  1],
+                [13,    1,       end,    1],
+                [14,    1,       end,    1],
+                [15,    1,       end,    1]]
+
+        return data
+
+
+class FirstStartLastEndInvalid(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       noise,  1],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       noise,  1],
+                [15,    1,       end,    1],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class FirstStartLastEndInvalidMissing(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       NULL,   1],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       NULL,   1],
+                [15,    1,       end,    1],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+CollectionFirstStartLastEnd = TestCollection([
+    FirstStartLastEndValid,
+    FirstStartLastEndInvalid,
+    FirstStartLastEndInvalidMissing,
+])
+
+
+class LastStartFirstEndValid(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  0],
+                [2,     1,       start,  0],
+                [3,     1,       start,  0],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  0],
+                [11,    1,       end,    0],
+                [12,    1,       noise,  0],
+                [13,    1,       end,    0],
+                [14,    1,       end,    0],
+                [15,    1,       end,    0]]
+
+        return data
+
+
+class LastStartFirstEndInvalid(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       noise,  0],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       noise,  0],
+                [15,    1,       end,    0],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class LastStartFirstEndInvalidMissing(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       NULL,   0],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       NULL,   0],
+                [15,    1,       end,    0],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+CollectionLastStartFirstEnd = TestCollection([
+    LastStartFirstEndValid,
+    LastStartFirstEndInvalid,
+    LastStartFirstEndInvalidMissing,
+])
+
+
+class LastStartLastEndValid(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  0],
+                [2,     1,       start,  0],
+                [3,     1,       start,  0],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  1],
+                [11,    1,       end,    1],
+                [12,    1,       noise,  1],
+                [13,    1,       end,    1],
+                [14,    1,       end,    1],
+                [15,    1,       end,    1]]
+
+        return data
+
+
+class LastStartLastEndInvalid(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       noise,  0],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       noise,  1],
+                [15,    1,       end,    1],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class LastStartLastEndInvalidMissing(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       NULL,   0],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       NULL,   1],
+                [15,    1,       end,    1],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+CollectionLastStartLastEnd = TestCollection([
+    LastStartLastEndValid,
+    LastStartLastEndInvalid,
+    LastStartLastEndInvalidMissing,
+])
