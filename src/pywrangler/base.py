@@ -2,7 +2,7 @@
 classes including wrangler descriptions and parameters.
 
 """
-
+import inspect
 from abc import ABC, abstractmethod
 
 from pywrangler.util import _pprint
@@ -63,7 +63,14 @@ class BaseWrangler(ABC):
 
         """
 
-        param_names = get_param_names(self.__class__.__init__, ["self"])
+        base_classes = [cls for cls in inspect.getmro(self.__class__)
+                        if issubclass(cls, BaseWrangler)]
+
+        ignore = ["self", "args", "kwargs"]
+        param_names = []
+        for cls in base_classes[::-1]:
+            param_names.extend(get_param_names(cls.__init__, ignore))
+
         param_dict = {x: getattr(self, x) for x in param_names}
 
         return param_dict
