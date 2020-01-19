@@ -6,6 +6,43 @@ import multiprocessing
 
 import pytest
 
+import pandas as pd
+
+
+def patch_spark_create_dataframe():
+    """Overwrite pyspark's default `SparkSession.createDataFrame` method to
+    cache all test data. This has proven to be faster because identical data
+    does not need to be converted multiple times. Out of memory should not
+    occur because test data is very small and if a memory limit is reached,
+    the oldest not-used dataframes should be dropped automatically.
+
+    """
+
+    from pyspark.sql.session import SparkSession
+
+    cache = {}
+
+    def wrapper(func):
+        def wrapped(self, data, *args, schema=None, **kwargs):
+            # create hashable key
+            if isinstance(data, pd.DataFrame):
+                key = tuple(data.columns), data.values.tobytes()
+            else:
+                key = str(data), schema
+
+            # check existent result and return cached dataframe
+            if key in cache:
+                return cache[key]
+            else:
+                result = func(self, data, *args, schema=schema, **kwargs)
+                result.cache()
+                cache[key] = result
+                return result
+
+        return wrapped
+
+    SparkSession.createDataFrame = wrapper(SparkSession.createDataFrame)
+
 
 @pytest.fixture(scope="session")
 def spark(request):
@@ -17,6 +54,8 @@ def spark(request):
     """
 
     try:
+        patch_spark_create_dataframe()
+
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
 

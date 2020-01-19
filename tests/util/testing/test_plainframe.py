@@ -94,7 +94,7 @@ def df_from_spark(spark):
 
     schema = types.StructType(columns)
 
-    return spark.createDataFrame(data, schema)
+    return spark.createDataFrame(data, schema=schema)
 
 
 def create_plain_frame(cols, rows, reverse_cols=False, reverse_rows=False):
