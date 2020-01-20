@@ -1,8 +1,6 @@
 """This module contains implementations of the interval identifier wrangler.
 
 """
-import operator
-from typing import NamedTuple
 
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
@@ -31,6 +29,17 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
     """
 
+    def __init__(self, *args, result_type: str = "enumerated", **kwargs):
+        super().__init__(*args, **kwargs)
+
+        valid_result_types = {"raw", "valid", "enumerated"}
+        if result_type not in valid_result_types:
+            raise ValueError("Parameter `result_type` is invalid with: {}. "
+                             "Allowed arguments are: {}"
+                             .format(result_type, valid_result_types))
+
+        self.result_type = result_type
+
     def validate_input(self, df: DataFrame):
         """Checks input data frame in regard to column names.
 
@@ -50,7 +59,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
                              "dataframes have no implicit order unlike pandas "
                              "dataframes.")
 
-    def _boolify_marker(self, marker_column, start=True):
+    def _boolify_marker(self, marker_column, start=True) -> Column:
         """Helper function to create an integer casted boolean column
         expression of start/end marker.
 
@@ -63,7 +72,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return marker_column.eqNullSafe(marker).cast("integer")
 
-    def _denoise_marker_column(self, window, start=True):
+    def _denoise_marker_column(self, window, start=True) -> Column:
         """Return marker column with noises removed and forward/backwards
          filled.
 
@@ -99,7 +108,8 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return fill
 
-    def _drop_duplicated_marker(self, marker_column, window, start=True):
+    def _drop_duplicated_marker(self, marker_column: Column, window: Window,
+                                start: bool = True) -> Column:
         """Modify marker column to keep only first start marker or last end
         marker.
 
@@ -141,35 +151,50 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return dropped
 
-    def _generate_windows(self):
-        """Generate pyspark sql windows which are required by all subsequent
-        computational steps. Two windows are relevant. First, `w_lag`
-        represents the main window corresponding to the given groupby and
-        orderby columns. Second, `w_id` is identical to `w_lag` except for an
-        addition column which resembles raw iids.
-
-        Returns
-        -------
-        w_lag, w_id: pyspark.sql.Window
-
-        """
-
-        orderby = util.prepare_orderby(self.order_columns, self.ascending)
-        groupby = self.groupby_columns or []
-
-        w_lag = Window.partitionBy(groupby).orderBy(orderby)
-        w_id = Window.partitionBy(groupby + [self.target_column_name])
-
-        return w_lag, w_id
-
-    def _preprocess_marker_column(self, window):
-        """If required, removes duplicated start/end markers and returns
-        modified marker column which is ready to be further processed.
+    def _window_groupby(self, reverse: bool = False) -> Window:
+        """Generate pyspark sql window which represents the main window
+        corresponding to the given groupby and orderby columns.
 
         Parameters
         ----------
-        window: pyspark.sql.Window
-            Resembles a window specification according to groupby/order.
+        reverse: bool, optional
+            Define order by to be reversed or not.
+
+        Returns
+        -------
+        window pyspark.sql.Window
+
+        """
+
+        orderby = util.prepare_orderby(self.order_columns, self.ascending,
+                                       reverse=reverse)
+        groupby = self.groupby_columns or []
+
+        return Window.partitionBy(groupby).orderBy(orderby)
+
+    def _window_raw_iids(self, column_name: str) -> Window:
+        """Generate pyspark sql window which represents the raw iids window
+        corresponding to the given groupby columns plus the intermediate
+        column representation of the raw iids.
+
+        Parameters
+        ----------
+        column_name: str
+            Name of the column which contains the raw iids.
+
+        Returns
+        -------
+        window pyspark.sql.Window
+
+        """
+
+        groupby = self.groupby_columns or []
+
+        return Window.partitionBy(groupby + [column_name])
+
+    def _preprocess_marker_column(self) -> Column:
+        """If required, removes duplicated start/end markers and returns
+        modified marker column which is ready to be further processed.
 
         Returns
         -------
@@ -177,6 +202,8 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
             Modified marker column.
 
         """
+
+        window = self._window_groupby()
 
         col = F.col(self.marker_column)
         if self._identical_start_end_markers:
@@ -190,7 +217,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return col
 
-    def _generate_raw_iids(self, marker_column, window):
+    def _generate_raw_iids(self, marker_column: Column) -> Column:
         """Create sequence of interval ids in increasing order regardless of
         their validity.
 
@@ -198,14 +225,14 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         ----------
         marker_column: pyspark.sql.column.Column
             Column expression resembling the marker column.
-        window: pyspark.sql.Window
-            Resembles a window specification according to groupby/order.
 
         Returns
         -------
         raw_iids: pyspark.sql.column.Column
 
         """
+
+        window = self._window_groupby()
 
         bool_start = self._boolify_marker(marker_column, True)
         bool_end = self._boolify_marker(marker_column, False)
@@ -219,7 +246,8 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return raw_iids
 
-    def _generate_valid_iids(self, marker_column, raw_iids, window):
+    def _generate_valid_iids(self, marker_column: Column, raw_iids: Column,
+                             cc: util.ColumnCacher) -> Column:
         """Create sequence of interval identifier ids in increasing order
         with invalid intervals being removed. Invalid iids will be set to 0.
 
@@ -229,9 +257,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
             Column expression resembling the marker column.
         raw_iids: pyspark.sql.column.Column
             Column expression with raw iids.
-        window: pyspark.sql.Window
-            Resembles a window specification according to groupby/order + the
-            column name of the raw iids.
 
         Returns
         -------
@@ -243,12 +268,15 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         bool_end = self._boolify_marker(marker_column, False)
         bool_start_end = bool_start + bool_end
 
+        raw_iids_name = cc.columns["raw_iids"]
+        window = self._window_raw_iids(raw_iids_name)
         bool_valid = F.sum(bool_start_end).over(window) == 2
         valid_iids = F.when(bool_valid, raw_iids).otherwise(0)
 
         return valid_iids
 
-    def _generate_renumerated_iids(self, valid_iids, window):
+    def _generate_renumerated_iids(self, valid_iids: Column,
+                                   reverse: bool = False) -> Column:
         """Create sequence of interval identifier ids in increasing order
         starting with 1 in steps of 1. Invalid intervals are marked with 0.
 
@@ -256,8 +284,6 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         ----------
         valid_iids: pyspark.sql.column.Column
             Column expression resembling valid iids.
-        window: pyspark.sql.Window
-            Resembles a window specification according to groupby/order.
 
         Returns
         -------
@@ -265,32 +291,41 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         """
 
+        window = self._window_groupby(reverse=reverse)
+
         valid_ids_shift = F.lag(valid_iids, default=0).over(window)
         valid_ids_diff = valid_ids_shift - valid_iids
         valid_ids_increase = (valid_ids_diff < 0).cast("integer")
 
         renumerate = F.sum(valid_ids_increase).over(window)
 
+        if reverse:
+            window_max = window.rowsBetween(Window.unboundedPreceding,
+                                            Window.unboundedFollowing)
+
+            diff_score = F.max(renumerate).over(window_max) + 1
+            renumerate = (renumerate - diff_score) * -1
+
         bool_valid = valid_iids != 0
         renumerated_iids = F.when(bool_valid, renumerate).otherwise(0)
 
         return renumerated_iids
 
-    def _generate_iids_identical(self, marker_col, window):
+    def _generate_iids_identical(self, marker_col: Column) -> Column:
         """Compute interval ids for identical start and end markers.
 
         Parameters
         ----------
         marker_column: pyspark.sql.column.Column
             Column expression resembling the marker column.
-        window: pyspark.sql.Window
-            Resembles a window specification according to groupby/order.
 
         Returns
         -------
         iids: pyspark.sql.column.Column
 
         """
+
+        window = self._window_groupby()
 
         bool_start = self._boolify_marker(marker_col)
         iids = F.sum(bool_start).over(window)
@@ -314,40 +349,34 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # check input
         self.validate_input(df)
 
-        # define window specs
-        w_lag, w_id = self._generate_windows()
+        # cacher
+        cc = util.ColumnCacher(df, True)
 
         # get preprocessed marker col
-        marker_col = self._preprocess_marker_column(w_lag)
+        marker_col = self._preprocess_marker_column()
 
         # early exit for identical start/end markers
         if self._identical_start_end_markers:
-            iids = self._generate_iids_identical(marker_col, w_lag)
+            iids = self._generate_iids_identical(marker_col)
             return df.withColumn(self.target_column_name, iids)
 
-        #df = df.withColumn("processed", marker_col)
-        #marker_col = F.col("processed")
+        # raw iids
+        iids_raw = self._generate_raw_iids(marker_col)
+        if self.result_type == "raw":
+            return cc.finish(self.target_column_name, iids_raw)
+        else:
+            iids_raw = cc.add("raw_iids", iids_raw)
 
-        # get iids
-        iids_raw = self._generate_raw_iids(marker_col, w_lag)
+        # valid iids
+        iids_valid = self._generate_valid_iids(marker_col, iids_raw, cc)
+        if self.result_type == "valid":
+            return cc.finish(self.target_column_name, iids_valid)
+        else:
+            iids_valid = cc.add("valid_iids", iids_valid)
 
-        #df = df.withColumn(self.target_column_name, iids_raw)
-        #df = df.withColumn("iids_raw", iids_raw)
-        #iids_raw = F.col("iids_raw")
-
-        iids_valid = self._generate_valid_iids(marker_col, iids_raw, w_id)
-        #df = df.withColumn("iids_valid", iids_valid)
-        #iids_valid = F.col("iids_valid")
-
-        iids_renumerated = self._generate_renumerated_iids(iids_valid, w_lag)
-        #df = df.withColumn("iids_renumerated", iids_renumerated)
-        #iids_renumerated = F.col("iids_renumerated")
-
-        # apply expressions
-        df = df.withColumn(self.target_column_name, iids_raw)
-        df = df.withColumn(self.target_column_name, iids_renumerated)
-
-        return df
+        # renumerated iids
+        iids_renumerated = self._generate_renumerated_iids(iids_valid)
+        return cc.finish(self.target_column_name, iids_renumerated)
 
 
 class VectorizedCumSumAdjusted(VectorizedCumSum):
@@ -356,65 +385,59 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
 
     """
 
-    def _marker_bool_start_end(self):
-        """get boolean series with start and end markers
-        """
-
-        marker_col = F.col(self.marker_column)
-        bool_start = marker_col.eqNullSafe(self.marker_start).cast("integer")
-        bool_end = marker_col.eqNullSafe(self.marker_end).cast("integer")
-        bool_start_end = bool_start + bool_end
-        return bool_start_end, marker_col
-
-    def _identify_valids(self, raw_iids, w_id):
+    def _identify_valids(self, raw_iids: Column,
+                         cc: util.ColumnCacher) -> Column:
         """Identifies valid/invalid intervals
 
         Parameters
         ----------
         raw_iids: pyspark.sql.Column
             interval ids for intervals
-        w_id: pyspark.sql.Window
-            window function of the interval ids
+        cc: util.ColumnCacher
 
         Returns
         -------
-        bool_valid: pyspark.sql.Column
-            valid intervals
-        valis_ids: pysparl.sql.Column
+        iids_valid: pysparl.sql.Column
             interval ids
 
         """
 
+        window = self._window_raw_iids(cc.columns["raw_iids"])
+
         col = F.col(self.marker_column)
         bool_start = col.eqNullSafe(self.marker_start).cast("integer")
         bool_end = col.eqNullSafe(self.marker_end).cast("integer")
-        start = F.max(bool_start).over(w_id)
-        end = F.max(bool_end).over(w_id)
+        start = F.max(bool_start).over(window)
+        end = F.max(bool_end).over(window)
         bool_valid = (start + end) == 2
-        valid_ids = F.when(bool_valid, raw_iids).otherwise(0)
+        iids_valid = F.when(bool_valid, raw_iids).otherwise(0)
 
-        return bool_valid, valid_ids
+        return iids_valid
 
-    def _prepare_iids(self, marker_col, w_lag, start_first,
-                      add_negate_shift_col):
-        """
+    def _generate_raw_iids_special(self, start_first: bool,
+                                   add_negate_shift_col: bool,
+                                   reverse=False) -> Column:
+        """Create sequence of interval ids in increasing order regardless of
+        their validity.
 
         Parameters
         ----------
-        marker_col: pyspark.sql.Column
-            Column where the markers are in
-        w_lag: pyspark.sql.Window
-            Defining the window
         start_first: bool
-            Defines if the first start is used for intervals
+            Defines if the first start is used for intervals.
         add_negate_shift_col: bool
-            True if the shift col have to be negated
+            True if the shift col have to be negated.
+        reverse: bool, optional
+            Define order by.
 
         Returns
         -------
-        result: NamedTuple
-            returns the raw interval ids and the forward filled marker Column
+        raw_iids: pyspark.sql.column.Column
+
         """
+
+        marker_col = F.col(self.marker_column)
+        window = self._window_groupby(reverse)
+
         # generate forward fill depending on interval
         if start_first:
             default = 0
@@ -427,56 +450,29 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
                 .when(marker_col == self.marker_start, 0) \
                 .otherwise(None)
 
-        window = w_lag.rowsBetween(Window.unboundedPreceding, 0)
-        forward_fill_col = F.last(forward_fill, ignorenulls=True).over(window)
+        ff_window = window.rowsBetween(Window.unboundedPreceding, 0)
+        forward_fill_col = F.last(forward_fill, ignorenulls=True).over(
+            ff_window)
 
         # shifting marker_col forward
         shift_col = F.lag(forward_fill_col, default=default, count=1) \
-            .over(w_lag) \
+            .over(window) \
             .cast("integer")
 
-        # compare forward fill col and shifted forward fill col, if equal set to 0
+        # compare forward fill col and shifted forward fill col
         end_marker_null_col = F.when(shift_col == forward_fill_col, 0) \
             .otherwise(forward_fill_col)
 
         if add_negate_shift_col:
-            # negate shift_col
             shift_col_negated = F.when(shift_col == 0, 1).otherwise(0)
             add_col = end_marker_null_col + shift_col_negated
         else:
             add_col = end_marker_null_col
 
         # build cum sum over window
-        nt = NamedTuple("iids_ffill",
-                        [("raw_iids", Column), ("forward_fill_col", Column)])
-        return nt(F.sum(add_col).over(w_lag), forward_fill_col)
+        raw_iids = F.sum(add_col).over(window)
 
-    def _continuous_renumeration(self, bool_valid, valid_ids, w_lag):
-        """re-numerate ids from 1 to x and fill invalid with 0
-
-        Parameters
-        ----------
-        bool_valid: pyspark.sql.Column
-            Marked as valid
-        valid_ids: pyspark.sql.Column
-            values for valid ids
-        w_lag: pyspark.sql.Window
-            Defining window
-
-        Returns
-        -------
-        result: pyspark.sql.Column
-            Continuous renumerated interval ids. Can be increasing oder decreasing.
-
-        """
-
-        valid_ids_shift = F.lag(valid_ids, default=0).over(w_lag)
-        valid_ids_diff = valid_ids_shift - valid_ids
-        valid_ids_increase = (valid_ids_diff < 0).cast("integer")
-
-        renumerate = F.sum(valid_ids_increase).over(w_lag)
-        renumerate_adjusted = F.when(bool_valid, renumerate).otherwise(0)
-        return renumerate_adjusted
+        return raw_iids
 
     def transform(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
@@ -500,7 +496,7 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
                    (~start_first & end_first))
 
         if pass_on:
-            super().transform(df)
+            return super().transform(df)
 
         # check input
         self.validate_input(df)
@@ -525,29 +521,28 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
 
         """
 
-        # define window specs
-        orderby = util.prepare_orderby(self.order_columns, self.ascending)
-        groupby = self.groupby_columns or []
+        # cacher
+        cc = util.ColumnCacher(df, True)
 
-        w_lag = Window.partitionBy(groupby).orderBy(orderby)
-        w_id = Window.partitionBy(groupby + [self.target_column_name])
+        # raw iids
+        iids_raw = self._generate_raw_iids_special(start_first=True,
+                                                   add_negate_shift_col=True)
 
-        bool_start_end, marker_col = self._marker_bool_start_end()
+        if self.result_type == "raw":
+            return cc.finish(self.target_column_name, iids_raw)
+        else:
+            iids_raw = cc.add("raw_iids", iids_raw)
 
-        raw_ffill = self._prepare_iids(marker_col, w_lag,
-                                       start_first=True,
-                                       add_negate_shift_col=True)
-        df = df.withColumn(self.target_column_name, raw_ffill.raw_iids)
+        # valid iids
+        iids_valid = self._identify_valids(iids_raw, cc)
+        if self.result_type == "valid":
+            return cc.finish(self.target_column_name, iids_valid)
+        else:
+            iids_valid = cc.add("valid_iids", iids_valid)
 
-        # separate valid vs invalid: ids with start AND end marker are valid
-        bool_valid, valid_ids = self._identify_valids(bool_start_end,
-                                                      raw_ffill.raw_iids, w_id,
-                                                      operator.ge)
-
-        renumerate_adjusted = self._continuous_renumeration(bool_valid,
-                                                            valid_ids, w_lag)
-
-        return df.withColumn(self.target_column_name, renumerate_adjusted)
+        # renumerated iids
+        iids_renumerated = self._generate_renumerated_iids(iids_valid)
+        return cc.finish(self.target_column_name, iids_renumerated)
 
     def _last_start_last_end(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
@@ -564,27 +559,27 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
 
         """
 
-        # define window specs
-        orderby_reverse = util.prepare_orderby(self.order_columns,
-                                               self.ascending, reverse=True)
-        groupby = self.groupby_columns or []
+        # cacher
+        cc = util.ColumnCacher(df, True)
 
-        w_lag = Window.partitionBy(groupby).orderBy(orderby_reverse)
-        w_id = Window.partitionBy(groupby + [self.target_column_name])
+        # raw iids
+        iids_raw = self._generate_raw_iids_special(start_first=False,
+                                                   add_negate_shift_col=True,
+                                                   reverse=True)
 
-        bool_start_end, marker_col = self._marker_bool_start_end()
+        iids_raw = iids_raw + 1
+        if self.result_type == "raw":
+            return cc.finish(self.target_column_name, iids_raw)
+        else:
+            iids_raw = cc.add("raw_iids", iids_raw)
 
-        raw_fill = self._prepare_iids(marker_col, w_lag,
-                                      start_first=False,
-                                      add_negate_shift_col=True)
-        raw_iids = raw_fill.raw_iids + 1
-        df = df.withColumn(self.target_column_name, raw_iids)
+        # valid iids
+        iids_valid = self._identify_valids(iids_raw, cc)
+        if self.result_type == "valid":
+            return cc.finish(self.target_column_name, iids_valid)
+        else:
+            iids_valid = cc.add("valid_ids", iids_valid)
 
-        # separate valid vs invalid: ids with start AND end marker are valid
-        bool_valid, valid_ids = self._identify_valids(bool_start_end, raw_iids,
-                                                      w_id, operator.ge)
-
-        renumerate_adjusted = self._continuous_renumeration(bool_valid,
-                                                            valid_ids, w_lag)
-
-        return df.withColumn(self.target_column_name, renumerate_adjusted)
+        # renumerated iids
+        iids_renumerated = self._generate_renumerated_iids(iids_valid, True)
+        return cc.finish(self.target_column_name, iids_renumerated)
