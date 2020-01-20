@@ -19,9 +19,10 @@ from tests.test_data.interval_identifier import (
     MARKER_USE_KWARGS
 )
 
-from pywrangler.pyspark.wranglers.interval_identifier import VectorizedCumSum
+from pywrangler.pyspark.wranglers.interval_identifier import VectorizedCumSum, \
+    VectorizedCumSumAdjusted
 
-WRANGLER = (VectorizedCumSum,)
+WRANGLER = (VectorizedCumSum, VectorizedCumSumAdjusted)
 WRANGLER_IDS = [x.__name__ for x in WRANGLER]
 WRANGLER_KWARGS = dict(argnames='wrangler',
                        argvalues=WRANGLER,
