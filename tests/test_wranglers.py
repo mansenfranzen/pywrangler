@@ -15,7 +15,7 @@ def ii_kwargs():
             "marker_end": "end",
             "marker_start_use_first": False,
             "marker_end_use_first": True,
-            "order_columns": ["col1", "col2"],
+            "orderby_columns": ["col1", "col2"],
             "groupby_columns": ["col3", "col4"],
             "ascending": [True, False],
             "target_column_name": "abc",
@@ -84,8 +84,8 @@ def test_base_interval_identifier_non_identical_markers(ii_kwargs,
 
 
 def test_base_interval_identifier_result_type(ii_kwargs, interval_identifier):
-    interval_identifier(**ii_kwargs)
+    kwargs = ii_kwargs.copy()
+    kwargs["result_type"] = "does not exist"
 
     with pytest.raises(ValueError):
-        interval_identifier(result_type="does not exist", **ii_kwargs)
-
+        interval_identifier(**kwargs)
