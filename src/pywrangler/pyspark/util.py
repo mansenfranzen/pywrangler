@@ -60,7 +60,7 @@ def prepare_orderby(order_columns: TYPE_COLUMNS,
 
 
 class ColumnCacher:
-    """Composite of PySparkWrangler which enables storing of intermediate
+    """Pyspark column expression cacher which enables storing of intermediate
     column expressions. PySpark column expressions can be stacked/chained. For
     example, a column expression may be a result of a conjunction of window
     functions and boolean masks for which the intermediate results are not
@@ -68,10 +68,10 @@ class ColumnCacher:
 
     There are two valid reasons to store intermediate results. First,
     debugging requires to inspect intermediate results. Second, stacking
-    column expressions seem to create more complex and less performant
-    computation graphs.
+    column expressions seem to create more complex computation graphs. Storing
+    intermediate results may help to decrease DAG complexity.
 
-    TODO: Add link to example for more complex graphs
+    For more, see Spark Jira: https://issues.apache.org/jira/browse/SPARK-30552
 
     """
 
@@ -110,6 +110,11 @@ class ColumnCacher:
             Name of the column.
         column: pyspark.sql.column.Column
             PySpark column expression to be explicitly added to dataframe.
+        force: bool, optional
+            You may need to force to add a column temporarily for a given
+            computation to finish even though you do not want to store
+            intermediate results. This may be the case for window specs which
+            rely on computed columns.
 
         Returns
         -------
@@ -118,9 +123,6 @@ class ColumnCacher:
         """
 
         if (self.mode is False) and (force is not True):
-            return column
-
-        if (self.mode is True) and (force == "debug"):
             return column
 
         col_name = "{}_{}".format(name, len(self.columns))
@@ -133,7 +135,21 @@ class ColumnCacher:
         return F.col(col_name)
 
     def finish(self, name, column) -> DataFrame:
-        """Closes column cacher and returns dataframe representation.
+        """Closes column cacher and returns dataframe representation with
+        provided final result column. Intermediate columns will be dropped
+        based on `mode`.
+
+        Parameters
+        ----------
+        name: str
+            Name of the final result column.
+        column: pyspark.sql.column.Column
+            Content of the final result column.
+
+        Returns
+        -------
+        df: pyspark.sql.DataFrame
+            Original dataframe with added column.
 
         """
 
