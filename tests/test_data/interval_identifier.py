@@ -1183,3 +1183,55 @@ CollectionLastStartLastEnd = TestCollection([
     LastStartLastEndInvalid,
     LastStartLastEndInvalidMissing,
 ])
+
+
+class ResultTypeRawIids(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  2],
+                [5,     1,       start,  3],
+                [6,     1,       noise,  3],
+                [7,     1,       end,    3],
+                [8,     1,       noise,  4],
+                [9,     1,       noise,  4],
+                [10,    1,       start,  5],
+                [11,    1,       noise,  5],
+                [12,    1,       end,    5],
+                [13,    1,       start,  6],
+                [14,    1,       end,    6]]
+
+        return data
+
+
+class ResultTypeValidIids(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       end,    0],
+                [2,     1,       noise,  0],
+                [3,     1,       end,    0],
+                [4,     1,       start,  5],
+                [5,     1,       noise,  5],
+                [6,     1,       end,    5],
+                [7,     1,       noise,  0],
+                [8,     1,       start,  4],
+                [9,     1,       end,    4],
+                [10,    1,       start,  9],
+                [11,    1,       noise,  9],
+                [12,    1,       end,    9],
+                [13,    1,       start,  0],
+                [14,    1,       start,  0]]
+
+        return data
