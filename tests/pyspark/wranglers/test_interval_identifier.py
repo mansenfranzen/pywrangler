@@ -2,7 +2,9 @@
 isort:skip_file
 """
 
+import pandas as pd
 import pytest
+from pywrangler.util.testing import PlainFrame
 
 pytestmark = pytest.mark.pyspark  # noqa: E402
 pyspark = pytest.importorskip("pyspark")  # noqa: E402
@@ -15,6 +17,8 @@ from tests.test_data.interval_identifier import (
     CollectionLastStartFirstEnd,
     CollectionLastStartLastEnd,
     MultipleIntervalsSpanningGroupbyExtendedTriple,
+    ResultTypeRawIids,
+    ResultTypeValidIids,
     MARKER_USE,
     MARKER_USE_KWARGS
 )
@@ -232,3 +236,59 @@ def test_repartition(wrangler, marker_use, spark):
 
     # pass wrangler to test case
     testcase_instance.test.pyspark(wrangler_instance.transform, repartition=5)
+
+
+@pytest.mark.parametrize(**MARKER_USE_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_result_type_raw_iids(wrangler, marker_use):
+    """Test for correct raw iids constraints. Returned result only needs to
+    distinguish intervals regardless of their validity. Interval ids do not
+    need to be in specific order.
+
+    """
+
+    testcase_instance = ResultTypeRawIids("pandas")
+    wrangler_instance = wrangler(result_type="raw",
+                                 **testcase_instance.test_kwargs,
+                                 **marker_use)
+
+    df_input = testcase_instance.input.to_pyspark()
+    df_output = testcase_instance.output.to_pandas()
+    df_result = wrangler_instance.transform(df_input)
+    df_result = (PlainFrame.from_pyspark(df_result)
+                 .to_pandas()
+                 .sort_values(testcase_instance.order_columns)
+                 .reset_index(drop=True))
+
+    col = testcase_instance.target_column_name
+    pd.testing.assert_series_equal(df_result[col].diff().ne(0),
+                                   df_output[col].diff().ne(0))
+
+
+@pytest.mark.parametrize(**MARKER_USE_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_result_type_valid_iids(wrangler, marker_use):
+    """Test for correct valid iids constraints. Returned result needs to
+    distinguish valid from invalid intervals. Invalid intervals need to be 0.
+
+    """
+
+    testcase_instance = ResultTypeValidIids("pyspark")
+    wrangler_instance = wrangler(result_type="valid",
+                                 **testcase_instance.test_kwargs,
+                                 **marker_use)
+
+    df_input = testcase_instance.input.to_pyspark()
+    df_output = testcase_instance.output.to_pandas()
+    df_result = wrangler_instance.transform(df_input)
+    df_result = (PlainFrame.from_pyspark(df_result)
+                 .to_pandas()
+                 .sort_values(testcase_instance.order_columns)
+                 .reset_index(drop=True))
+
+    col = testcase_instance.target_column_name
+    pd.testing.assert_series_equal(df_result[col].diff().ne(0),
+                                   df_output[col].diff().ne(0))
+
+    pd.testing.assert_series_equal(df_result[col].eq(0),
+                                   df_output[col].eq(0))

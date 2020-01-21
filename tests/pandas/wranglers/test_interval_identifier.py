@@ -1,4 +1,5 @@
 import pytest
+import pandas as pd
 
 from tests.test_data.interval_identifier import (
     CollectionGeneral,
@@ -7,6 +8,8 @@ from tests.test_data.interval_identifier import (
     CollectionFirstStartLastEnd,
     CollectionLastStartFirstEnd,
     CollectionLastStartLastEnd,
+    ResultTypeRawIids,
+    ResultTypeValidIids,
     MARKER_USE,
     MARKER_USE_KWARGS
 )
@@ -182,3 +185,49 @@ def test_last_start_last_end(testcase, wrangler):
     kwargs = dict(merge_input=True,
                   force_dtypes={"marker": testcase_instance.marker_dtype})
     testcase_instance.test(wrangler_instance.transform, **kwargs)
+
+@pytest.mark.parametrize(**MARKER_USE_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_result_type_raw_iids(wrangler, marker_use):
+    """Test for correct raw iids constraints. Returned result only needs to
+    distinguish intervals regardless of their validity. Interval ids do not
+    need to be in specific order.
+
+    """
+
+    testcase_instance = ResultTypeRawIids("pandas")
+    wrangler_instance = wrangler(result_type="raw",
+                                 **testcase_instance.test_kwargs,
+                                 **marker_use)
+
+    df_input = testcase_instance.input.to_pandas()
+    df_output = testcase_instance.output.to_pandas()
+    df_result = wrangler_instance.transform(df_input)
+
+    col = testcase_instance.target_column_name
+    pd.testing.assert_series_equal(df_result[col].diff().ne(0),
+                                   df_output[col].diff().ne(0))
+
+@pytest.mark.parametrize(**MARKER_USE_KWARGS)
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+def test_result_type_valid_iids(wrangler, marker_use):
+    """Test for correct valid iids constraints. Returned result needs to
+    distinguish valid from invalid intervals. Invalid intervals need to be 0.
+
+    """
+
+    testcase_instance = ResultTypeValidIids("pandas")
+    wrangler_instance = wrangler(result_type="valid",
+                                 **testcase_instance.test_kwargs,
+                                 **marker_use)
+
+    df_input = testcase_instance.input.to_pandas()
+    df_output = testcase_instance.output.to_pandas()
+    df_result = wrangler_instance.transform(df_input)
+
+    col = testcase_instance.target_column_name
+    pd.testing.assert_series_equal(df_result[col].diff().ne(0),
+                                   df_output[col].diff().ne(0))
+
+    pd.testing.assert_series_equal(df_result[col].eq(0),
+                                   df_output[col].eq(0))
