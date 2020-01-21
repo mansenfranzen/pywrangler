@@ -39,14 +39,14 @@ class _IntervalIdentifierTestCase(DataTestCase):
 
     @property
     def test_columns(self):
-        return (self.order_columns +
+        return (self.orderby_columns +
                 self.groupby_columns +
                 [self.marker_column, self.target_column_name])
 
     @property
     def test_kwargs(self):
         return dict(
-            order_columns=self.order_columns,
+            orderby_columns=self.orderby_columns,
             groupby_columns=self.groupby_columns,
             marker_column=self.marker_column,
             ascending=self.ascending,
@@ -71,7 +71,7 @@ class _SingleOrderGroup(_IntervalIdentifierTestCase):
 
     """
 
-    order_columns = ["order"]
+    orderby_columns = ["order"]
     groupby_columns = ["groupby"]
     ascending = [True]
 
@@ -113,7 +113,7 @@ class _MultiOrderGroup(_IntervalIdentifierTestCase):
 
     """
 
-    order_columns = ["order1", "order2"]
+    orderby_columns = ["order1", "order2"]
     groupby_columns = ["groupby1", "groupby2"]
     ascending = [True, True]
 

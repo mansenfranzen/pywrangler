@@ -61,7 +61,7 @@ class IntervalIdentifier(BaseWrangler):
     marker_end_use_first: bool
         Identifies if the first occurring `marker_end` of an interval is used.
         Otherwise the last occurring `marker_end` is used. Default is True.
-    order_columns: str, Iterable[str], optional
+    orderby_columns: str, Iterable[str], optional
         Column names which define the order of the data (e.g. a timestamp
         column). Sort order can be defined with the parameter `ascending`.
     groupby_columns: str, Iterable[str], optional
@@ -91,7 +91,7 @@ class IntervalIdentifier(BaseWrangler):
                  marker_end: Any = NONEVALUE,
                  marker_start_use_first=False,
                  marker_end_use_first=True,
-                 order_columns: TYPE_COLUMNS = None,
+                 orderby_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
                  ascending: TYPE_ASCENDING = None,
                  result_type: str = "enumerated",
@@ -102,7 +102,7 @@ class IntervalIdentifier(BaseWrangler):
         self.marker_end = marker_end
         self.marker_start_use_first = marker_start_use_first
         self.marker_end_use_first = marker_end_use_first
-        self.order_columns = sanitizer.ensure_iterable(order_columns)
+        self.orderby_columns = sanitizer.ensure_iterable(orderby_columns)
         self.groupby_columns = sanitizer.ensure_iterable(groupby_columns)
         self.ascending = sanitizer.ensure_iterable(ascending)
         self.result_type = result_type
@@ -123,7 +123,7 @@ class IntervalIdentifier(BaseWrangler):
         if self.ascending:
 
             # check for equal number of items of order and sort columns
-            if len(self.order_columns) != len(self.ascending):
+            if len(self.orderby_columns) != len(self.ascending):
                 raise ValueError('`order_columns` and `ascending` must have '
                                  'equal number of items.')
 
@@ -133,8 +133,8 @@ class IntervalIdentifier(BaseWrangler):
                                  'as arguments for `ascending`')
 
         # set default sort order if None is given
-        elif self.order_columns:
-            self.ascending = tuple([True] * len(self.order_columns))
+        elif self.orderby_columns:
+            self.ascending = tuple([True] * len(self.orderby_columns))
 
     @property
     def preserves_sample_size(self) -> bool:

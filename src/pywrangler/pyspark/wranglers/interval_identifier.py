@@ -47,10 +47,10 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         """
 
         util.validate_columns(df, self.marker_column)
-        util.validate_columns(df, self.order_columns)
+        util.validate_columns(df, self.orderby_columns)
         util.validate_columns(df, self.groupby_columns)
 
-        if self.order_columns is None:
+        if self.orderby_columns is None:
             raise ValueError("Please define an order column. Pyspark "
                              "dataframes have no implicit order unlike pandas "
                              "dataframes.")
@@ -186,7 +186,7 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         """
 
-        orderby = util.prepare_orderby(self.order_columns, self.ascending,
+        orderby = util.prepare_orderby(self.orderby_columns, self.ascending,
                                        reverse=reverse)
         groupby = self.groupby_columns or []
 

@@ -34,7 +34,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         """
 
         util.validate_columns(df, self.marker_column)
-        util.validate_columns(df, self.order_columns)
+        util.validate_columns(df, self.orderby_columns)
         util.validate_columns(df, self.groupby_columns)
         util.validate_empty_df(df)
 
@@ -56,7 +56,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         self._validate_input(df)
 
         # transform
-        df_ordered = util.sort_values(df, self.order_columns, self.ascending)
+        df_ordered = util.sort_values(df, self.orderby_columns, self.ascending)
         df_grouped = util.groupby(df_ordered, self.groupby_columns)
 
         df_result = df_grouped[self.marker_column] \

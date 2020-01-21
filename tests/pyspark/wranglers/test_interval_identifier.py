@@ -257,7 +257,7 @@ def test_result_type_raw_iids(wrangler, marker_use):
     df_result = wrangler_instance.transform(df_input)
     df_result = (PlainFrame.from_pyspark(df_result)
                  .to_pandas()
-                 .sort_values(testcase_instance.order_columns)
+                 .sort_values(testcase_instance.orderby_columns)
                  .reset_index(drop=True))
 
     col = testcase_instance.target_column_name
@@ -283,7 +283,7 @@ def test_result_type_valid_iids(wrangler, marker_use):
     df_result = wrangler_instance.transform(df_input)
     df_result = (PlainFrame.from_pyspark(df_result)
                  .to_pandas()
-                 .sort_values(testcase_instance.order_columns)
+                 .sort_values(testcase_instance.orderby_columns)
                  .reset_index(drop=True))
 
     col = testcase_instance.target_column_name
