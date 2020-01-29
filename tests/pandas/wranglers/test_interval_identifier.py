@@ -11,8 +11,8 @@ from tests.test_data.interval_identifier import (
     ResultTypeRawIids,
     ResultTypeValidIids,
     MARKER_USE,
-    MARKER_USE_KWARGS
-)
+    MARKER_USE_KWARGS,
+    CollectionNoOrderGroupBy)
 
 from pywrangler.pandas.wranglers.interval_identifier import (
     NaiveIterator,
@@ -231,3 +231,35 @@ def test_result_type_valid_iids(wrangler, marker_use):
 
     pd.testing.assert_series_equal(df_result[col].eq(0),
                                    df_output[col].eq(0))
+
+
+@pytest.mark.parametrize(**WRANGLER_KWARGS)
+@pytest.mark.parametrize(**MARKER_USE_KWARGS)
+@CollectionNoOrderGroupBy.pytest_parametrize_kwargs("missing_order_group_by")
+@CollectionNoOrderGroupBy.pytest_parametrize
+def test_no_order_groupby(testcase, missing_order_group_by, marker_use,
+                          wrangler):
+    """Tests against all available wranglers and test cases.
+
+    Parameters
+    ----------
+    testcase: DataTestCase
+        Generates test data for given test case.
+    wrangler: pywrangler.wrangler_instance.interfaces.IntervalIdentifier
+        Refers to the actual wrangler_instance begin tested. See `WRANGLER`.
+
+    """
+
+    # instantiate test case
+    testcase_instance = testcase("pandas")
+
+    # instantiate wrangler
+    wrangler_kwargs = testcase_instance.test_kwargs.copy()
+    wrangler_kwargs.update(marker_use)
+    wrangler_kwargs.update(missing_order_group_by)
+    wrangler_instance = wrangler(**wrangler_kwargs)
+
+    # pass wrangler to test case
+    kwargs = dict(merge_input=True,
+                  force_dtypes={"marker": testcase_instance.marker_dtype})
+    testcase_instance.test(wrangler_instance.transform, **kwargs)

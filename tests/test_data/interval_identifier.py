@@ -1235,3 +1235,24 @@ class ResultTypeValidIids(_SingleOrderGroup):
                 [14,    1,       start,  0]]
 
         return data
+
+
+MISSING_ORDER_GROUP_BY = {'no_order': {'groupby_columns': 'groupby',
+                                       'orderby_columns': None,
+                                       'ascending': None},
+                          'no_groupby': {'groupby_columns': None,
+                                         'orderby_columns': 'order'},
+                          'no_order_no_groupby': {'groupby_columns': None,
+                                                  'orderby_columns': None,
+                                                  'ascending': None}}
+
+CollectionNoOrderGroupBy = TestCollection([
+    NoInterval,
+    NoIntervalInvalidStart,
+    NoIntervalInvalidEnd,
+    SingleInterval,
+    SingleIntervalStartsWith,
+    SingleIntervalEndsWith,
+    SingleIntervalSpanning,
+    SingleIntervalSpanningGroupby]
+    , test_kwargs={"missing_order_group_by": MISSING_ORDER_GROUP_BY})
