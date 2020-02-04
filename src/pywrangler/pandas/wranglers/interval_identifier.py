@@ -2,7 +2,7 @@
 
 """
 
-from typing import List, Callable
+from typing import List
 
 import pandas as pd
 from pywrangler.pandas import util

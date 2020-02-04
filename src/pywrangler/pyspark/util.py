@@ -3,7 +3,7 @@ pyspark wranglers.
 
 """
 
-from typing import Iterable, Union, Optional, List
+from typing import Union, Optional, List
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
