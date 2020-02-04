@@ -368,12 +368,8 @@ class PlainFrame(_ImmutablePlainFrame):
         data = list(zip(*values))
         schema = types.StructType(fields)
 
-        try:
-            from pywrangler.util.testing import TEST_VARS
-            spark = TEST_VARS["spark_session"]
-        except KeyError:
-            from pyspark.sql import SparkSession
-            spark = SparkSession.builder.getOrCreate()
+        from pyspark.sql import SparkSession
+        spark = SparkSession.builder.getOrCreate()
 
         return spark.createDataFrame(data=data, schema=schema)
 
