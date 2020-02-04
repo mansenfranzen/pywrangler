@@ -47,9 +47,6 @@ def validate_columns(df: DataFrame, columns: TYPE_COLUMNS):
 
     """
 
-    if not columns:
-        return
-
     columns = ensure_iterable(columns)
 
     for column in columns:
@@ -82,11 +79,8 @@ def prepare_orderby(orderby_columns: TYPE_PYSPARK_COLUMNS,
 
     """
 
-    # default empty value
-    if orderby_columns is None:
-        return []
-
     # ensure columns
+    orderby_columns = ensure_iterable(orderby_columns)
     orderby_columns = [ensure_column(column) for column in orderby_columns]
 
     # check if only True/False is given broadcast
