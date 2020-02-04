@@ -177,9 +177,9 @@ def test_result_type_valid_iids(wrangler, marker_use):
     """
 
     testcase_instance = ResultTypeValidIids("pyspark")
-    wrangler_instance = wrangler(result_type="valid",
-                                 **testcase_instance.test_kwargs,
-                                 **marker_use)
+    kwargs = testcase_instance.test_kwargs.copy()
+    kwargs.update(marker_use)
+    wrangler_instance = wrangler(result_type="valid", **kwargs)
 
     df_input = testcase_instance.input.to_pyspark()
     df_output = testcase_instance.output.to_pandas()
