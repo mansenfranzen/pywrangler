@@ -68,7 +68,8 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return marker_column.eqNullSafe(marker).cast("integer")
 
-    def _reverse_enumeration(self, column: Column, window: Window) -> Column:
+    @staticmethod
+    def _reverse_enumeration(column: Column, window: Window) -> Column:
         """Helper function to reverse enumeration of given column.
 
         Parameters
@@ -366,6 +367,58 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
 
         return iids
 
+    def _compute_valid_renumerated_iids(self,
+                                        marker_col: Column,
+                                        iids_raw: Column,
+                                        cc: util.ColumnCacher,
+                                        valid_iids_exact: bool,
+                                        renumerated_iids_reverse: bool) \
+            -> DataFrame:
+        """Compute valid and renumerated iids based on given parameters.
+
+        Parameters
+        ----------
+        marker_col: pyspark.sql.column.Column
+            Pyspark column expression representing the preprocessed/raw marker
+            column.
+        iids_raw: pyspark.sql.column.Column
+            Pyspark column expression representing the raw iids.
+        cc: util.ColumnCacher
+            Column cacher.
+        valid_iids_exact: bool
+            Define if valid iid identification requires exact start/end-sum
+            match.
+        renumerated_iids_reverse: bool
+            Define if renumeration is required to be in reverse order.
+
+        Returns
+        -------
+        result: pyspark.sql.Dataframe
+            Same columns as original dataframe plus the new interval id column.
+
+        """
+
+        if self.result_type == "raw":
+            return cc.finish(self.target_column_name, iids_raw)
+
+        # valid iids
+        iids_raw = cc.add("raw_iids", iids_raw)
+        iids_valid = self._generate_valid_iids(marker_col,
+                                               iids_raw,
+                                               valid_iids_exact,
+                                               cc)
+
+        if self.result_type == "valid":
+            return cc.finish(self.target_column_name, iids_valid)
+
+        # renumerated iids
+        iids_valid = cc.add("valid_ids", iids_valid)
+        iids_renumerated = self._generate_renumerated_iids(
+            iids_valid,
+            renumerated_iids_reverse)
+
+        return cc.finish(self.target_column_name, iids_renumerated)
+
     def transform(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
 
@@ -397,20 +450,11 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         # raw iids
         iids_raw = self._generate_raw_iids(marker_col)
 
-        if self.result_type == "raw":
-            return cc.finish(self.target_column_name, iids_raw)
-
-        # valid iids
-        iids_raw = cc.add("raw_iids", iids_raw)
-        iids_valid = self._generate_valid_iids(marker_col, iids_raw, True, cc)
-
-        if self.result_type == "valid":
-            return cc.finish(self.target_column_name, iids_valid)
-
-        # renumerated iids
-        iids_valid = cc.add("valid_iids", iids_valid)
-        iids_renumerated = self._generate_renumerated_iids(iids_valid)
-        return cc.finish(self.target_column_name, iids_renumerated)
+        return self._compute_valid_renumerated_iids(marker_col,
+                                                    iids_raw,
+                                                    cc,
+                                                    True,
+                                                    False)
 
 
 class VectorizedCumSumAdjusted(VectorizedCumSum):
@@ -440,7 +484,7 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
 
         # delegate to super for unhandled implementations
         if (self._identical_start_end_markers or
-            self.result_type == "raw" or
+                self.result_type == "raw" or
                 (start_first & ~end_first) or
                 (~start_first & end_first)):
             return super().transform(df)
@@ -535,21 +579,13 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
         iids_raw = self._generate_raw_iids_special(start_first=True,
                                                    add_negate_shift_col=True)
 
-        if self.result_type == "raw":
-            return cc.finish(self.target_column_name, iids_raw)
-
-        # valid iids
         marker_col = F.col(self.marker_column)
-        iids_raw = cc.add("raw_iids", iids_raw)
-        iids_valid = self._generate_valid_iids(marker_col, iids_raw, False, cc)
 
-        if self.result_type == "valid":
-            return cc.finish(self.target_column_name, iids_valid)
-
-        # renumerated iids
-        iids_valid = cc.add("valid_iids", iids_valid)
-        iids_renumerated = self._generate_renumerated_iids(iids_valid)
-        return cc.finish(self.target_column_name, iids_renumerated)
+        return self._compute_valid_renumerated_iids(marker_col,
+                                                    iids_raw,
+                                                    cc,
+                                                    False,
+                                                    False)
 
     def _last_start_last_end(self, df: DataFrame) -> DataFrame:
         """Extract interval ids from given dataframe.
@@ -573,19 +609,10 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
                                                    add_negate_shift_col=True,
                                                    reverse=True)
         iids_raw = iids_raw + 1
-
-        if self.result_type == "raw":
-            return cc.finish(self.target_column_name, iids_raw)
-
-        # valid iids
         marker_col = F.col(self.marker_column)
-        iids_raw = cc.add("raw_iids", iids_raw)
-        iids_valid = self._generate_valid_iids(marker_col, iids_raw, False, cc)
 
-        if self.result_type == "valid":
-            return cc.finish(self.target_column_name, iids_valid)
-
-        # renumerated iids
-        iids_valid = cc.add("valid_ids", iids_valid)
-        iids_renumerated = self._generate_renumerated_iids(iids_valid, True)
-        return cc.finish(self.target_column_name, iids_renumerated)
+        return self._compute_valid_renumerated_iids(marker_col,
+                                                    iids_raw,
+                                                    cc,
+                                                    False,
+                                                    True)
