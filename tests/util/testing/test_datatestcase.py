@@ -120,7 +120,7 @@ def test_test_collection(datatestcase):
     # test with custom parameter name
     parametrize = pytest.mark.parametrize
     param = dict(argvalues=[datatestcase], ids=["TestCase"], argnames="a")
-    assert collection.pytest_parametrize("a") == parametrize(**param)
+    assert collection.pytest_parametrize_testcases("a") == parametrize(**param)
 
     # test with default parameter name
     param["argnames"] = "testcase"
@@ -128,4 +128,15 @@ def test_test_collection(datatestcase):
     def func():
         pass
 
-    assert collection.pytest_parametrize(func) == parametrize(**param)(func)
+    assert (collection.pytest_parametrize_testcases(func) ==
+            parametrize(**param)(func))
+
+    # test test_kwargs
+    kwargs = {"conf1": {"param1": 1, "param2": 2}}
+    param = dict(argvalues=[1, 2], ids=["param1", "param2"], argnames="conf1")
+    collection = TestCollection([datatestcase], test_kwargs=kwargs)
+    assert (collection.pytest_parametrize_kwargs("conf1") ==
+            parametrize(**param))
+
+    with pytest.raises(ValueError):
+        collection.pytest_parametrize_kwargs("notexists")

@@ -464,16 +464,28 @@ class TestCollection:
     """Contains one or more DataTestCases. Provides convenient functions to
     be testable as a group (e.g. for pytest).
 
+    Attributes
+    ----------
+    testcases: List[DataTestCase]
+        List of collected DataTestCase instances.
+    test_kwargs: dict, optional
+        A dict of optional parameter configuration which could be applied to
+        collected DataTestCase instances. Keys refer to configuration names.
+        Values refer to dicts which in turn represent keyword arguments.
+
     """
 
-    def __init__(self, datatestcases: Sequence[DataTestCase]):
+    def __init__(self, datatestcases: Sequence[DataTestCase],
+                 test_kwargs: Optional[Dict[str, Dict]] = None):
         self.testcases = datatestcases
+        self.test_kwargs = test_kwargs or {}
 
     @property
     def names(self):
         return [testcase.__name__ for testcase in self.testcases]
 
-    def pytest_parametrize(self, arg: Union[str, Callable]) -> Callable:
+    def pytest_parametrize_testcases(self,
+                                     arg: Union[str, Callable]) -> Callable:
         """Convenient decorator to wrap a test function which will be
         parametrized with all available DataTestCases in pytest conform manner.
 
@@ -494,18 +506,16 @@ class TestCollection:
         default:
 
         >>> test_collection = TestCollection([test1, test2])
-        >>> @test_collection.pytest_parametrize
+        >>> @test_collection.pytest_parametrize_testcases
         >>> def test_dummy(testcase):
         >>>     testcase().test.pandas(some_func)
 
         If a custom parameter name is provided, it will be used:
 
         >>> test_collection = TestCollection([test1, test2])
-        >>> @test_collection.pytest_parametrize("customname")
+        >>> @test_collection.pytest_parametrize_testcases("customname")
         >>> def test_dummy(customname):
         >>>     customname().test.pandas(some_func)
-
-
 
         """
 
@@ -519,3 +529,44 @@ class TestCollection:
         else:
             param["argnames"] = "testcase"
             return pytest.mark.parametrize(**param)(arg)
+
+    def pytest_parametrize_kwargs(self, identifier: str) -> Callable:
+        """Convenient decorator to access provided `test_kwargs` and wrap them
+        into `pytest.mark.parametrize`.
+
+        Parameters
+        ----------
+        identifier: str
+            The name of the test kwargs.
+
+
+        Examples
+        --------
+
+        In the following example, `conf1` represents an available configuration
+        to be tested. `param1` and `param2` will be passed to the actual test
+        function.
+
+        >>> kwargs= {"conf1": {"param1": 1, "param2": 2}}
+        >>> test_collection = TestCollection([test1, test2])
+        >>> @test_collection.pytest_parametrize_testcases
+        >>> @test_collection.pytest_parametrize_kwargs("conf1")
+        >>> def test_dummy(testcase, conf1):
+        >>>     testcase().test.pandas(some_func, test_kwargs=conf1)
+
+        """
+
+        import pytest
+
+        if identifier not in self.test_kwargs:
+            raise ValueError("Provided test kwargs identifier '{}' does "
+                             "not exist. Available test kwargs are: {}."
+                             .format(identifier, self.test_kwargs.keys()))
+
+        keys, values = zip(*self.test_kwargs[identifier].items())
+
+        kwargs = dict(argnames=identifier,
+                      argvalues=list(values),
+                      ids=list(keys))
+
+        return pytest.mark.parametrize(**kwargs)
