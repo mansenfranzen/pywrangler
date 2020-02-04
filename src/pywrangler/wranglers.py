@@ -134,7 +134,7 @@ class IntervalIdentifier(BaseWrangler):
 
         # set default sort order if None is given
         elif self.orderby_columns:
-            self.ascending = tuple([True] * len(self.orderby_columns))
+            self.ascending = [True] * len(self.orderby_columns)
 
     @property
     def preserves_sample_size(self) -> bool:

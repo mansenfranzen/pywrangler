@@ -34,6 +34,17 @@ def test_base_interval_identifier_init(ii_kwargs, interval_identifier):
     assert bii.get_params() == ii_kwargs
 
 
+def test_base_interval_identifier_forced_ascending(ii_kwargs,
+                                                   interval_identifier):
+    forced_ascending = ii_kwargs.copy()
+    forced_ascending["ascending"] = None
+
+    wrangler = interval_identifier
+    bii = wrangler(**forced_ascending)
+
+    assert bii.ascending == [True, True]
+
+
 def test_base_interval_identifier_sort_length_exc(ii_kwargs,
                                                   interval_identifier):
     incorrect_length = ii_kwargs.copy()
