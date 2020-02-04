@@ -87,10 +87,10 @@ class IntervalIdentifier(BaseWrangler):
 
     def __init__(self,
                  marker_column: str,
-                 marker_start,
+                 marker_start: Any,
                  marker_end: Any = NONEVALUE,
-                 marker_start_use_first=False,
-                 marker_end_use_first=True,
+                 marker_start_use_first: bool = False,
+                 marker_end_use_first: bool = True,
                  orderby_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
                  ascending: TYPE_ASCENDING = None,
@@ -130,7 +130,7 @@ class IntervalIdentifier(BaseWrangler):
             # check for correct sorting keywords
             if not all([isinstance(x, bool) for x in self.ascending]):
                 raise ValueError('Only `True` and `False` are '
-                                 'as arguments for `ascending`')
+                                 'allowed arguments for `ascending`')
 
         # set default sort order if None is given
         elif self.orderby_columns:
