@@ -3,7 +3,7 @@ pyspark wranglers.
 
 """
 
-from typing import Iterable, Union, Optional
+from typing import Iterable, Union, Optional, List
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
@@ -11,8 +11,28 @@ from pyspark.sql.column import Column
 
 from pywrangler.util.sanitizer import ensure_iterable
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
+from pywrangler.pyspark.types import TYPE_PYSPARK_COLUMNS
 
-TYPE_OPT_COLUMN = Union[None, Iterable[Column]]
+
+def ensure_column(column: Union[Column, str]) -> Column:
+    """Helper function to ensure that provided column will be of type
+    `pyspark.sql.column.Column`.
+
+    Parameters
+    ----------
+    column: str, Column
+        Column object to be casted if required.
+
+    Returns
+    -------
+    ensured: Column
+
+    """
+
+    if isinstance(column, Column):
+        return column
+    else:
+        return F.col(column)
 
 
 def validate_columns(df: DataFrame, columns: TYPE_COLUMNS):
@@ -39,23 +59,51 @@ def validate_columns(df: DataFrame, columns: TYPE_COLUMNS):
                              .format(column))
 
 
-def prepare_orderby(order_columns: TYPE_COLUMNS,
-                    ascending: TYPE_ASCENDING,
-                    reverse: bool = False) -> TYPE_OPT_COLUMN:
+def prepare_orderby(orderby_columns: TYPE_PYSPARK_COLUMNS,
+                    ascending: TYPE_ASCENDING = True,
+                    reverse: bool = False) -> List[Column]:
     """Convenient function to return orderby columns in correct
     ascending/descending order.
 
+    Parameters
+    ----------
+    orderby_columns: TYPE_PYSPARK_COLUMNS
+        Columns to explicitly apply an order to.
+    ascending: TYPE_ASCENDING, optional
+        Define order of columns via bools. True and False refer to ascending
+        and descending, respectively.
+    reverse: bool, optional
+        Reverse the given order. By default, not activated.
+
+    Returns
+    -------
+    ordered: list
+        List of order columns.
+
     """
 
-    if order_columns is None:
+    # default empty value
+    if orderby_columns is None:
         return []
 
-    zipped = zip(order_columns, ascending)
+    # ensure columns
+    orderby_columns = [ensure_column(column) for column in orderby_columns]
+
+    # check if only True/False is given broadcast
+    if isinstance(ascending, bool):
+        ascending = [ascending] * len(orderby_columns)
+
+    # ensure equal lengths, otherwise raise
+    elif len(orderby_columns) != len(ascending):
+        raise ValueError('`orderby_columns` and `ascending` must have '
+                         'equal number of items.')
+
+    zipped = zip(orderby_columns, ascending)
 
     def boolify(sort_ascending: Optional[bool]) -> bool:
         return bool(sort_ascending) != reverse
 
-    return [column if boolify(sort_ascending) else F.desc(column)
+    return [column.asc() if boolify(sort_ascending) else column.desc()
             for column, sort_ascending in zipped]
 
 

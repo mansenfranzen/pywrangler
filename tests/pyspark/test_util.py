@@ -14,6 +14,11 @@ pyspark = pytest.importorskip("pyspark")  # noqa: E402
 from pywrangler.pyspark import util
 
 
+def test_ensure_column(spark):
+    assert str(F.col("a")) == str(util.ensure_column("a"))
+    assert str(F.col("a")) == str(util.ensure_column(F.col("a")))
+
+
 def test_spark_wrangler_validate_columns_raises(spark):
 
     data = {"col1": [1, 2], "col2": [3, 4]}
@@ -29,6 +34,32 @@ def test_spark_wrangler_validate_columns_not_raises(spark):
     df = spark.createDataFrame(pd.DataFrame(data))
 
     util.validate_columns(df, ("col1", "col2"))
+    util.validate_columns(df, None)
+
+
+def test_prepare_orderby(spark):
+
+    columns = ["a", "b"]
+
+    # test empty input
+    assert util.prepare_orderby(None) == []
+
+    # test broadcast
+    result = [F.col("a").asc(), F.col("b").asc()]
+    assert str(result) == str(util.prepare_orderby(columns, True))
+
+    # test exact
+    result = [F.col("a").asc(), F.col("b").desc()]
+    assert str(result) == str(util.prepare_orderby(columns, [True, False]))
+
+    # test reverse
+    result = [F.col("a").asc(), F.col("b").desc()]
+    assert str(result) == str(util.prepare_orderby(columns, [False, True],
+                                                   reverse=True))
+
+    # raise unequal lengths
+    with pytest.raises(ValueError):
+        util.prepare_orderby(columns, [True, False, True])
 
 
 def test_column_cacher(spark):
