@@ -5,6 +5,7 @@ pandas wranglers.
 
 import numpy as np
 import pandas as pd
+from pandas.core.groupby.generic import DataFrameGroupBy
 
 from pywrangler.util.sanitizer import ensure_iterable
 from pywrangler.util.types import TYPE_ASCENDING, TYPE_COLUMNS
@@ -32,13 +33,10 @@ def validate_columns(df: pd.DataFrame, columns: TYPE_COLUMNS):
     ----------
     df: pd.DataFrame
         Dataframe to check against.
-    columns: Tuple[str]
+    columns: iterable[str]
         Columns to be validated.
 
     """
-
-    if not columns:
-        return
 
     columns = ensure_iterable(columns)
 
@@ -55,7 +53,20 @@ def sort_values(df: pd.DataFrame,
     """Convenient function to return sorted dataframe while taking care of
      optional order columns and order (ascending/descending).
 
-     """
+    Parameters
+    ----------
+    df: pd.DataFrame
+        Dataframe to check against.
+    order_columns: TYPE_COLUMNS
+        Columns to be sorted.
+    ascending: TYPE_ASCENDING
+        Column order.
+
+    Returns
+    -------
+    df_sorted: pd.DataFrame
+
+    """
 
     if order_columns:
         return df.sort_values(order_columns, ascending=ascending)
@@ -63,11 +74,23 @@ def sort_values(df: pd.DataFrame,
         return df
 
 
-def groupby(df: pd.DataFrame, groupby_columns: TYPE_COLUMNS):
+def groupby(df: pd.DataFrame,
+            groupby_columns: TYPE_COLUMNS) -> DataFrameGroupBy:
     """Convenient function to group by a dataframe while taking care of
      optional groupby columns. Always returns a `DataFrameGroupBy` object.
 
-     """
+    Parameters
+    ----------
+    df: pd.DataFrame
+        Dataframe to check against.
+    groupby_columns: TYPE_COLUMNS
+        Columns to be grouped by.
+
+    Returns
+    -------
+    groupby: DataFrameGroupBy
+
+    """
 
     if groupby_columns:
         return df.groupby(groupby_columns)
