@@ -16,6 +16,7 @@ MARKER_USE = {"FirstStartFirstEnd": {"marker_start_use_first": True,
              "LastStartFirstEnd": {"marker_start_use_first": False,
                                    "marker_end_use_first": True}}
 
+
 MARKER_USE_KWARGS = dict(argnames="marker_use",
                          argvalues=list(MARKER_USE.values()),
                          ids=list(MARKER_USE.keys()))
@@ -30,6 +31,9 @@ class _IntervalIdentifierTestCase(DataTestCase):
 
     marker_column = "marker"
     target_column_name = "iid"
+
+    marker_start_use_first = False
+    marker_end_use_first = True
 
     @property
     def test_dtypes(self):
@@ -52,7 +56,9 @@ class _IntervalIdentifierTestCase(DataTestCase):
             ascending=self.ascending,
             marker_start=self.marker_start,
             marker_end=self.marker_end,
-            target_column_name=self.target_column_name
+            target_column_name=self.target_column_name,
+            marker_start_use_first = self.marker_start_use_first,
+            marker_end_use_first = self.marker_end_use_first
         )
 
     def input(self):
@@ -125,6 +131,26 @@ class _MultiOrderGroupReverse(_MultiOrderGroup):
     """
 
     ascending = [False, False]
+
+
+class _FirstStartFirstEnd:
+    marker_start_use_first = True
+    marker_end_use_first = True
+
+
+class _FirstStartLastEnd:
+    marker_start_use_first = True
+    marker_end_use_first = False
+
+
+class _LastStartLastEnd:
+    marker_start_use_first = False
+    marker_end_use_first = False
+
+
+class _LastStartFirstEnd:
+    marker_start_use_first = False
+    marker_end_use_first = True
 
 
 class NoInterval(_SingleOrderGroup):
@@ -652,7 +678,7 @@ CollectionGeneral = TestCollection([
     MultipleOrderGroupbyReverse,
     MultipleOrderGroupbyMissing,
     MultipleOrderGroupbyMissingUnsorted
-])
+], test_kwargs={"marker_use": MARKER_USE})
 
 
 class _IdenticalStartEnd:
@@ -789,7 +815,7 @@ CollectionIdenticalStartEnd = TestCollection([
 ])
 
 
-class FirstStartFirstEndValid(_SingleOrderGroup):
+class FirstStartFirstEndValid(_FirstStartFirstEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -816,7 +842,7 @@ class FirstStartFirstEndValid(_SingleOrderGroup):
         return data
 
 
-class FirstStartFirstEndInvalid(_SingleOrderGroup):
+class FirstStartFirstEndInvalid(_FirstStartFirstEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -849,7 +875,7 @@ class FirstStartFirstEndInvalid(_SingleOrderGroup):
         return data
 
 
-class FirstStartFirstEndInvalidMissing(_SingleOrderGroup):
+class FirstStartFirstEndInvalidMissing(_FirstStartFirstEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -881,14 +907,7 @@ class FirstStartFirstEndInvalidMissing(_SingleOrderGroup):
         return data
 
 
-CollectionFirstStartFirstEnd = TestCollection([
-    FirstStartFirstEndValid,
-    FirstStartFirstEndInvalid,
-    FirstStartFirstEndInvalidMissing,
-])
-
-
-class FirstStartLastEndValid(_SingleOrderGroup):
+class FirstStartLastEndValid(_FirstStartLastEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -915,7 +934,7 @@ class FirstStartLastEndValid(_SingleOrderGroup):
         return data
 
 
-class FirstStartLastEndInvalid(_SingleOrderGroup):
+class FirstStartLastEndInvalid(_FirstStartLastEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -948,7 +967,7 @@ class FirstStartLastEndInvalid(_SingleOrderGroup):
         return data
 
 
-class FirstStartLastEndInvalidMissing(_SingleOrderGroup):
+class FirstStartLastEndInvalidMissing(_FirstStartLastEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -980,14 +999,7 @@ class FirstStartLastEndInvalidMissing(_SingleOrderGroup):
         return data
 
 
-CollectionFirstStartLastEnd = TestCollection([
-    FirstStartLastEndValid,
-    FirstStartLastEndInvalid,
-    FirstStartLastEndInvalidMissing,
-])
-
-
-class LastStartFirstEndValid(_SingleOrderGroup):
+class LastStartFirstEndValid(_LastStartFirstEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -1014,7 +1026,7 @@ class LastStartFirstEndValid(_SingleOrderGroup):
         return data
 
 
-class LastStartFirstEndInvalid(_SingleOrderGroup):
+class LastStartFirstEndInvalid(_LastStartFirstEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -1047,7 +1059,7 @@ class LastStartFirstEndInvalid(_SingleOrderGroup):
         return data
 
 
-class LastStartFirstEndInvalidMissing(_SingleOrderGroup):
+class LastStartFirstEndInvalidMissing(_LastStartFirstEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -1079,14 +1091,7 @@ class LastStartFirstEndInvalidMissing(_SingleOrderGroup):
         return data
 
 
-CollectionLastStartFirstEnd = TestCollection([
-    LastStartFirstEndValid,
-    LastStartFirstEndInvalid,
-    LastStartFirstEndInvalidMissing,
-])
-
-
-class LastStartLastEndValid(_SingleOrderGroup):
+class LastStartLastEndValid(_LastStartLastEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -1113,7 +1118,7 @@ class LastStartLastEndValid(_SingleOrderGroup):
         return data
 
 
-class LastStartLastEndInvalid(_SingleOrderGroup):
+class LastStartLastEndInvalid(_LastStartLastEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -1146,7 +1151,7 @@ class LastStartLastEndInvalid(_SingleOrderGroup):
         return data
 
 
-class LastStartLastEndInvalidMissing(_SingleOrderGroup):
+class LastStartLastEndInvalidMissing(_LastStartLastEnd, _SingleOrderGroup):
 
     def data(self):
         start = self.marker_start
@@ -1178,10 +1183,19 @@ class LastStartLastEndInvalidMissing(_SingleOrderGroup):
         return data
 
 
-CollectionLastStartLastEnd = TestCollection([
+CollectionMarkerSpecifics = TestCollection([
     LastStartLastEndValid,
     LastStartLastEndInvalid,
     LastStartLastEndInvalidMissing,
+    LastStartFirstEndValid,
+    LastStartFirstEndInvalid,
+    LastStartFirstEndInvalidMissing,
+    FirstStartLastEndValid,
+    FirstStartLastEndInvalid,
+    FirstStartLastEndInvalidMissing,
+    FirstStartFirstEndValid,
+    FirstStartFirstEndInvalid,
+    FirstStartFirstEndInvalidMissing,
 ])
 
 
