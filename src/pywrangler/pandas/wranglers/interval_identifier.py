@@ -5,7 +5,6 @@
 from typing import List
 
 import pandas as pd
-
 from pywrangler.pandas import util
 from pywrangler.pandas.base import PandasSingleNoFit
 from pywrangler.wranglers import IntervalIdentifier
@@ -24,7 +23,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
 
     """
 
-    def validate_input(self, df: pd.DataFrame):
+    def _validate_input(self, df: pd.DataFrame):
         """Checks input data frame in regard to column names and empty data.
 
         Parameters
@@ -35,7 +34,7 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         """
 
         util.validate_columns(df, self.marker_column)
-        util.validate_columns(df, self.order_columns)
+        util.validate_columns(df, self.orderby_columns)
         util.validate_columns(df, self.groupby_columns)
         util.validate_empty_df(df)
 
@@ -54,10 +53,10 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
         """
 
         # check input
-        self.validate_input(df)
+        self._validate_input(df)
 
         # transform
-        df_ordered = util.sort_values(df, self.order_columns, self.ascending)
+        df_ordered = util.sort_values(df, self.orderby_columns, self.ascending)
         df_grouped = util.groupby(df_ordered, self.groupby_columns)
 
         df_result = df_grouped[self.marker_column] \
@@ -71,13 +70,6 @@ class _BaseIntervalIdentifier(PandasSingleNoFit, IntervalIdentifier):
 
         return df_result
 
-    def _transform(self, series: pd.Series) -> List[int]:
-        """Needs to be implemented.
-
-        """
-
-        raise NotImplementedError
-
 
 class NaiveIterator(_BaseIntervalIdentifier):
     """Most simple, sequential implementation which iterates values while
@@ -85,49 +77,35 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
     """
 
+    def _transform(self, values: pd.Series) -> List[int]:
+        """Selects appropriate algorithm depending on identical/different
+        start and end markers.
+
+        """
+
+        start_first = self.marker_start_use_first
+        end_first = self.marker_end_use_first
+
+        if self._identical_start_end_markers:
+            return self._agg_identical_start_end_markers(values)
+        elif self.result_type == "raw":
+            return self._agg_raw_iids(values)
+        elif not start_first and end_first:
+            return self._generic_start_first_end(values, False)
+        elif start_first and not end_first:
+            return self._generic_start_last_end(values, True)
+        elif start_first and end_first:
+            return self._generic_start_first_end(values, True)
+        elif not start_first and not end_first:
+            return self._generic_start_last_end(values, False)
+
     def _is_start(self, value):
         return value == self.marker_start
 
     def _is_end(self, value):
         return value == self.marker_end
 
-    def _is_valid_start(self, value, active):
-        """A valid start occurs if there is no active interval present (no
-        start marker was seen since last end marker).
-
-        """
-
-        return self._is_start(value) and not active
-
-    def _is_invalid_start(self, value, active):
-        """An invalid start occurs if there is already an active interval
-        present (start marker was seen since last end marker).
-
-        """
-
-        return self._is_start(value) and active
-
-    def _is_valid_end(self, value, active):
-        """A valid end is defined with `value` begin equal to the close
-        marker and `active` being unqual to 0 which means there is an
-        active interval.
-
-        """
-
-        return self._is_end(value) and active
-
-    def _transform(self, series: pd.Series) -> List[int]:
-        """Selects appropriate algorithm depending on identical/different
-        start and end markers.
-
-        """
-
-        if self._identical_start_end_markers:
-            return self._transform_start_only(series)
-        else:
-            return self._transform_start_and_end(series)
-
-    def _transform_start_only(self, series: pd.Series) -> List[int]:
+    def _agg_identical_start_end_markers(self, series: pd.Series) -> List[int]:
         """Iterates given `series` testing each value against start marker
         while increasing counter each time start marker is encountered.
 
@@ -146,13 +124,48 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
         return result
 
+    def _agg_raw_iids(self, series: pd.Series) -> List[int]:
+        """Iterates given `series` testing each value against start marker
+        while increasing counter each time start or end marker (shifted) is
+        encountered.
 
-    def _transform_start_and_end(self, series: pd.Series) -> List[int]:
+        Assumes that series is already ordered and grouped.
+
+        """
+
+        result = []
+        counter = 0
+        lag = False
+
+        for value in series.values:
+            if lag:
+                counter += 1
+                lag = False
+
+            if self._is_start(value):
+                counter += 1
+            elif self._is_end(value):
+                lag = True
+
+            result.append(counter)
+
+        return result
+
+    def _generic_start_first_end(self, series: pd.Series, first_start: bool) \
+            -> List[int]:
         """Iterates given `series` testing each value against start and end
         markers while keeping track of already instantiated intervals to
         separate valid from invalid intervals.
 
         Assumes that series is already ordered and grouped.
+
+        Parameters
+        ----------
+        series: pd.Series
+            Sorted values which contain interval data.
+        first_start: bool
+            Indicates if first or last start is required. If True, generates
+            ids for first start. If False, generates ids for last start.
 
         """
 
@@ -163,18 +176,20 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
         for value in series.values:
 
-            if self._is_invalid_start(value, active):
-                # add invalid values to result (from previous begin marker)
-                result.extend([0] * len(intermediate))
+            if self._is_start(value):
+                if active and not first_start:
+                    # add invalid values to result (from previous begin marker)
+                    result.extend([0] * len(intermediate))
 
-                # start new intermediate list
-                intermediate = [active]
+                    # start new intermediate list
+                    intermediate = []
 
-            elif self._is_valid_start(value, active):
-                active = counter + 1
+                if not active:
+                    active = counter + 1
+
                 intermediate.append(active)
 
-            elif self._is_valid_end(value, active):
+            elif self._is_end(value) and active:
                 # add valid interval to result
                 result.extend(intermediate)
                 result.append(active)
@@ -194,6 +209,89 @@ class NaiveIterator(_BaseIntervalIdentifier):
 
         return result
 
+    def _generic_start_last_end(self, series: pd.Series, first_start: bool) \
+            -> List[int]:
+        """Iterates given `series` testing each value against start and end
+        markers while keeping track of already instantiated intervals to
+        separate valid from invalid intervals.
+
+        Requires state for opened start/end markers and number of noise values
+        since last end marker.
+
+        Assumes that series is already ordered and grouped.
+
+        Parameters
+        ----------
+        series: pd.Series
+            Sorted values which contain interval data.
+        first_start: bool
+            Indicates if first or last start is required. If True, generates
+            ids for first start. If False, generates ids for last start.
+
+        """
+
+        counter = 0  # counts the current interval id
+        active_start = False  # remember opened start marker
+        active_end = False  # remember opened end marker
+        noise_counter = 0  # store number of noises after end marker
+        intermediate = []  # store intermediate results
+        result = []  # keeps track of all results
+
+        for value in series.values:
+            # handle start marker
+            if self._is_start(value):
+                # closing valid interval
+                if active_start & active_end:
+                    result.extend(intermediate)
+                    result.extend([0] * noise_counter)
+                    counter += 1
+
+                    noise_counter = 0
+                    active_end = False
+                    intermediate = []
+
+                # increase counter only if start was not active previously
+                elif not active_start:
+                    counter += 1
+
+                # handle last start
+                elif not active_end and not first_start:
+                    result.extend([0] * len(intermediate))
+                    intermediate = []
+
+                active_start = True
+                intermediate.append(counter)
+
+            # handle end marker
+            elif self._is_end(value):
+                if not active_start:
+                    result.append(0)
+                else:
+                    active_end = True
+                    count = len(intermediate) + noise_counter + 1
+                    result.extend([counter] * count)
+
+                    intermediate = []
+                    noise_counter = 0
+
+            # handle noise
+            else:
+                if active_end:
+                    noise_counter += 1
+                elif active_start:
+                    intermediate.append(counter)
+                else:
+                    result.append(0)
+
+        # handle remaining values
+        if active_start & ~active_end:
+            result.extend([0] * len(intermediate))
+        elif active_end:
+            intermediate.extend([0] * noise_counter)
+            result.extend(intermediate)
+
+        return result
+
 
 class VectorizedCumSum(_BaseIntervalIdentifier):
     """Sophisticated approach using multiple, vectorized operations. Using
@@ -201,8 +299,65 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
 
     """
 
-    def _transform(self, series: pd.Series) -> List[int]:
-        """First, get enumeration of all intervals (valid and invalid). Every
+    def _transform(self, values: pd.Series) -> List[int]:
+        """Selects appropriate algorithm depending on identical/different
+        start and end markers.
+
+        """
+
+        if self._identical_start_end_markers:
+            return self._agg_identical_start_end_markers(values)
+
+        if self.marker_start_use_first and not self.result_type == "raw":
+            values = self._drop_duplicated_marker(values, True)
+
+        if not self.marker_end_use_first and not self.result_type == "raw":
+            values = self._drop_duplicated_marker(values, False)
+
+        return self._last_start_first_end(values)
+
+    def _drop_duplicated_marker(self, marker_column: pd.Series,
+                                start: bool = True):
+        """Modify marker column to keep only first start marker or last end
+        marker.
+
+        Parameters
+        ----------
+        marker_column: pd.Series
+            Values for which duplicated markers will be removed.
+        start: bool, optional
+            Indicate which duplicates should be dropped. If True, only first
+            start marker is kept. If False, only last end marker is kept.
+
+        Returns
+        -------
+        dropped: pd.Series
+
+        """
+
+        valid_values = [self.marker_start, self.marker_end]
+        denoised = marker_column.where(marker_column.isin(valid_values))
+
+        if start:
+            fill = denoised.ffill()
+            marker = 1
+            shift = 1
+        else:
+            fill = denoised.bfill()
+            marker = 2
+            shift = -1
+
+        shifted = fill.shift(shift)
+        shifted_start_only = shifted.where(fill.eq(marker))
+
+        mask_drop = (shifted_start_only == marker_column)
+        dropped = marker_column.where(~mask_drop)
+
+        return dropped
+
+    def _last_start_first_end(self, series: pd.Series) -> List[int]:
+        """Extract shortest intervals from given dataFrame as ids.
+        First, get enumeration of all intervals (valid and invalid). Every
         time a start or end marker is encountered, increase interval id by one.
         The end marker is shifted by one to include the end marker in the
         current interval. This is realized via the cumulative sum of boolean
@@ -220,24 +375,35 @@ class VectorizedCumSum(_BaseIntervalIdentifier):
 
         # get boolean series with start and end markers
         bool_start = series.eq(self.marker_start)
-
-        if self._identical_start_end_markers:
-            return bool_start.cumsum()
-
         bool_end = series.eq(self.marker_end)
 
         # shifting the close marker allows cumulative sum to include the end
         bool_end_shift = bool_end.shift().fillna(False)
 
         # get increasing ids for intervals (in/valid) with cumsum
-        ser_ids = bool_start.add(bool_end_shift).cumsum()
+        iids_raw = bool_start.add(bool_end_shift).cumsum()
+        if self.result_type == "raw":
+            return iids_raw
 
         # separate valid vs invalid: ids with start AND end marker are valid
-        bool_valid_ids = bool_start.add(bool_end).groupby(ser_ids).sum().eq(2)
+        mask_valid_ids = bool_start.add(bool_end).groupby(iids_raw).sum().eq(2)
+        valid_ids = mask_valid_ids.index[mask_valid_ids].values
+        mask = iids_raw.isin(valid_ids)
 
-        valid_ids = bool_valid_ids.index[bool_valid_ids].values
-        bool_valid = ser_ids.isin(valid_ids)
+        if self.result_type == "valid":
+            return iids_raw.where(mask, 0)
 
         # re-numerate ids from 1 to x and fill invalid with 0
-        result = ser_ids[bool_valid].diff().ne(0).cumsum()
+        result = iids_raw[mask].diff().ne(0).cumsum()
         return result.reindex(series.index).fillna(0).values
+
+    def _agg_identical_start_end_markers(self, series: pd.Series) -> List[int]:
+        """Iterates given `series` testing each value against start marker
+        while increasing counter each time start marker is encountered.
+
+        Assumes that series is already ordered and grouped.
+
+        """
+
+        bool_start = series.eq(self.marker_start)
+        return bool_start.cumsum()

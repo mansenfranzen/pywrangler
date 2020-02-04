@@ -25,15 +25,24 @@ class IntervalIdentifier(BaseWrangler):
     values of the first daylight interval are assigned with id 1. All values of
     the second daylight interval will be assigned with id 2 and so on.
 
-    Values which do not belong to any valid interval are assigned the value 0
-    by definition (if start and end marker are identical, there are only
-    invalid values possible before the first start marker is encountered).
+    By default, values which do not belong to any valid interval, are assigned
+    the value 0 by definition (please refer to `result_type` for different
+    result types). If start and end marker are identical or the end marker is
+    not provided, invalid values are only possible before the first start
+    marker is encountered.
 
-    Only the shortest valid interval is identified. Given multiple opening
-    markers in sequence without an intermittent closing marker, only the last
-    opening marker is relevant and the rest is ignored. Given multiple
-    closing markers in sequence without an intermittent opening marker, only
-    the first closing marker is relevant and the rest is ignored.
+    Due to messy data, start and end marker may occur multiple times in
+    sequence until its counterpart is reached. Therefore, intervals may have
+    different spans based on different task requirements. For example, the very
+    first start or very last start marker may define the correct start of an
+    interval. Accordingly, four intervals can be selected by setting
+    `marker_start_use_first` and `marker_end_use_first`. The resulting
+    intervals are as follows:
+
+        - first start / first end
+        - first start / last end (longest interval)
+        - last start / first end (shortest interval)
+        - last start / last end
 
     Opening and closing markers are included in their corresponding interval.
 
@@ -46,7 +55,13 @@ class IntervalIdentifier(BaseWrangler):
     marker_end: Any, optional
         A value defining the end of an interval. This value is optional. If not
         given, the end marker equals the start marker.
-    order_columns: str, Iterable[str], optional
+    marker_start_use_first: bool
+        Identifies if the first occurring `marker_start` of an interval is used.
+        Otherwise the last occurring `marker_start` is used. Default is False.
+    marker_end_use_first: bool
+        Identifies if the first occurring `marker_end` of an interval is used.
+        Otherwise the last occurring `marker_end` is used. Default is True.
+    orderby_columns: str, Iterable[str], optional
         Column names which define the order of the data (e.g. a timestamp
         column). Sort order can be defined with the parameter `ascending`.
     groupby_columns: str, Iterable[str], optional
@@ -57,6 +72,14 @@ class IntervalIdentifier(BaseWrangler):
         Sort ascending vs. descending. Specify list for multiple sort orders.
         If a list is specified, length of the list must equal length of
         `order_columns`. Default is True.
+    result_type: str, optional
+        Defines the content of the returned result. If 'raw', interval ids
+        will be in arbitrary order with no distinction made between valid and
+        invalid intervals. Intervals are distinguishable by interval id but the
+        interval id may not provide any more information. If 'valid', the
+        result is the same as 'raw' but all invalid intervals are set to 0.
+        If 'enumerated', the result is the same as 'valid' but interval ids
+        increase in ascending order (as defined by order) in steps of one.
     target_column_name: str, optional
         Name of the resulting target column.
 
@@ -64,20 +87,33 @@ class IntervalIdentifier(BaseWrangler):
 
     def __init__(self,
                  marker_column: str,
-                 marker_start,
+                 marker_start: Any,
                  marker_end: Any = NONEVALUE,
-                 order_columns: TYPE_COLUMNS = None,
+                 marker_start_use_first: bool = False,
+                 marker_end_use_first: bool = True,
+                 orderby_columns: TYPE_COLUMNS = None,
                  groupby_columns: TYPE_COLUMNS = None,
                  ascending: TYPE_ASCENDING = None,
+                 result_type: str = "enumerated",
                  target_column_name: str = "iids"):
 
         self.marker_column = marker_column
         self.marker_start = marker_start
         self.marker_end = marker_end
-        self.order_columns = sanitizer.ensure_iterable(order_columns)
+        self.marker_start_use_first = marker_start_use_first
+        self.marker_end_use_first = marker_end_use_first
+        self.orderby_columns = sanitizer.ensure_iterable(orderby_columns)
         self.groupby_columns = sanitizer.ensure_iterable(groupby_columns)
         self.ascending = sanitizer.ensure_iterable(ascending)
+        self.result_type = result_type
         self.target_column_name = target_column_name
+
+        # check correct result type
+        valid_result_types = {"raw", "valid", "enumerated"}
+        if result_type not in valid_result_types:
+            raise ValueError("Parameter `result_type` is invalid with: {}. "
+                             "Allowed arguments are: {}"
+                             .format(result_type, valid_result_types))
 
         # check for identical start and end values
         self._identical_start_end_markers = ((marker_end == NONEVALUE) or
@@ -87,18 +123,18 @@ class IntervalIdentifier(BaseWrangler):
         if self.ascending:
 
             # check for equal number of items of order and sort columns
-            if len(self.order_columns) != len(self.ascending):
+            if len(self.orderby_columns) != len(self.ascending):
                 raise ValueError('`order_columns` and `ascending` must have '
                                  'equal number of items.')
 
             # check for correct sorting keywords
             if not all([isinstance(x, bool) for x in self.ascending]):
                 raise ValueError('Only `True` and `False` are '
-                                 'as arguments for `ascending`')
+                                 'allowed arguments for `ascending`')
 
         # set default sort order if None is given
-        elif self.order_columns:
-            self.ascending = (True, ) * len(self.order_columns)
+        elif self.orderby_columns:
+            self.ascending = [True] * len(self.orderby_columns)
 
     @property
     def preserves_sample_size(self) -> bool:

@@ -7,6 +7,21 @@ from pywrangler.util.testing import NaN, NULL, DataTestCase, PlainFrame, \
     TestCollection
 
 
+MARKER_USE = {"FirstStartFirstEnd": {"marker_start_use_first": True,
+                                    "marker_end_use_first": True},
+             "FirstStartLastEnd": {"marker_start_use_first": True,
+                                   "marker_end_use_first": False},
+             "LastStartLastEnd": {"marker_start_use_first": False,
+                                  "marker_end_use_first": False},
+             "LastStartFirstEnd": {"marker_start_use_first": False,
+                                   "marker_end_use_first": True}}
+
+
+MARKER_USE_KWARGS = dict(argnames="marker_use",
+                         argvalues=list(MARKER_USE.values()),
+                         ids=list(MARKER_USE.keys()))
+
+
 class _IntervalIdentifierTestCase(DataTestCase):
 
     marker_start = 1
@@ -17,6 +32,9 @@ class _IntervalIdentifierTestCase(DataTestCase):
     marker_column = "marker"
     target_column_name = "iid"
 
+    marker_start_use_first = False
+    marker_end_use_first = True
+
     @property
     def test_dtypes(self):
         dtypes = ["int"] * len(self.test_columns)
@@ -25,20 +43,22 @@ class _IntervalIdentifierTestCase(DataTestCase):
 
     @property
     def test_columns(self):
-        return (self.order_columns +
+        return (self.orderby_columns +
                 self.groupby_columns +
                 [self.marker_column, self.target_column_name])
 
     @property
     def test_kwargs(self):
         return dict(
-            order_columns=self.order_columns,
+            orderby_columns=self.orderby_columns,
             groupby_columns=self.groupby_columns,
             marker_column=self.marker_column,
             ascending=self.ascending,
             marker_start=self.marker_start,
             marker_end=self.marker_end,
-            target_column_name=self.target_column_name
+            target_column_name=self.target_column_name,
+            marker_start_use_first = self.marker_start_use_first,
+            marker_end_use_first = self.marker_end_use_first
         )
 
     def input(self):
@@ -57,7 +77,7 @@ class _SingleOrderGroup(_IntervalIdentifierTestCase):
 
     """
 
-    order_columns = ["order"]
+    orderby_columns = ["order"]
     groupby_columns = ["groupby"]
     ascending = [True]
 
@@ -99,7 +119,7 @@ class _MultiOrderGroup(_IntervalIdentifierTestCase):
 
     """
 
-    order_columns = ["order1", "order2"]
+    orderby_columns = ["order1", "order2"]
     groupby_columns = ["groupby1", "groupby2"]
     ascending = [True, True]
 
@@ -111,6 +131,26 @@ class _MultiOrderGroupReverse(_MultiOrderGroup):
     """
 
     ascending = [False, False]
+
+
+class _FirstStartFirstEnd:
+    marker_start_use_first = True
+    marker_end_use_first = True
+
+
+class _FirstStartLastEnd:
+    marker_start_use_first = True
+    marker_end_use_first = False
+
+
+class _LastStartLastEnd:
+    marker_start_use_first = False
+    marker_end_use_first = False
+
+
+class _LastStartFirstEnd:
+    marker_start_use_first = False
+    marker_end_use_first = True
 
 
 class NoInterval(_SingleOrderGroup):
@@ -610,7 +650,7 @@ class MultipleOrderGroupbyMissingUnsorted(_MultiOrderGroup):
         return data
 
 
-BaseTests = TestCollection([
+CollectionGeneral = TestCollection([
     NoInterval,
     NoIntervalInvalidStart,
     NoIntervalInvalidEnd,
@@ -638,7 +678,7 @@ BaseTests = TestCollection([
     MultipleOrderGroupbyReverse,
     MultipleOrderGroupbyMissing,
     MultipleOrderGroupbyMissingUnsorted
-])
+], test_kwargs={"marker_use": MARKER_USE})
 
 
 class _IdenticalStartEnd:
@@ -765,7 +805,7 @@ class IdenticalStartEndMultipleOrderGroupbyMissing(_IdenticalStartEnd,
         return data
 
 
-IdenticalStartEndTests = TestCollection([
+CollectionIdenticalStartEnd = TestCollection([
     IdenticalStartEndSingleInterval,
     IdenticalStartEndMultipleInterval,
     IdenticalStartEndMultipleIntervalReversed,
@@ -773,3 +813,460 @@ IdenticalStartEndTests = TestCollection([
     IdenticalStartEndMultipleIntervalMissingUnsorted,
     IdenticalStartEndMultipleOrderGroupbyMissing
 ])
+
+
+class FirstStartFirstEndValid(_FirstStartFirstEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  1],
+                [2,     1,       start,  1],
+                [3,     1,       start,  1],
+                [4,     1,       noise,  1],
+                [5,     1,       start,  1],
+                [6,     1,       noise,  1],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  0],
+                [11,    1,       end,    0],
+                [12,    1,       noise,  0],
+                [13,    1,       end,    0],
+                [14,    1,       end,    0],
+                [15,    1,       end,    0]]
+
+        return data
+
+
+class FirstStartFirstEndInvalid(_FirstStartFirstEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       noise,  1],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       noise,  0],
+                [15,    1,       end,    0],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class FirstStartFirstEndInvalidMissing(_FirstStartFirstEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       NULL,   1],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       NULL,   0],
+                [15,    1,       end,    0],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class FirstStartLastEndValid(_FirstStartLastEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  1],
+                [2,     1,       start,  1],
+                [3,     1,       start,  1],
+                [4,     1,       noise,  1],
+                [5,     1,       start,  1],
+                [6,     1,       noise,  1],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  1],
+                [11,    1,       end,    1],
+                [12,    1,       noise,  1],
+                [13,    1,       end,    1],
+                [14,    1,       end,    1],
+                [15,    1,       end,    1]]
+
+        return data
+
+
+class FirstStartLastEndInvalid(_FirstStartLastEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       noise,  1],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       noise,  1],
+                [15,    1,       end,    1],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class FirstStartLastEndInvalidMissing(_FirstStartLastEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  1],
+                [8,     1,       start,  1],
+                [9,     1,       NULL,   1],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       NULL,   1],
+                [15,    1,       end,    1],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class LastStartFirstEndValid(_LastStartFirstEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  0],
+                [2,     1,       start,  0],
+                [3,     1,       start,  0],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  0],
+                [11,    1,       end,    0],
+                [12,    1,       noise,  0],
+                [13,    1,       end,    0],
+                [14,    1,       end,    0],
+                [15,    1,       end,    0]]
+
+        return data
+
+
+class LastStartFirstEndInvalid(_LastStartFirstEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       noise,  0],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       noise,  0],
+                [15,    1,       end,    0],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class LastStartFirstEndInvalidMissing(_LastStartFirstEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       NULL,   0],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    0],
+                [14,    1,       NULL,   0],
+                [15,    1,       end,    0],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class LastStartLastEndValid(_LastStartLastEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       start,  0],
+                [2,     1,       start,  0],
+                [3,     1,       start,  0],
+                [4,     1,       noise,  0],
+                [5,     1,       start,  0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  1],
+                [8,     1,       noise,  1],
+                [9,     1,       end,    1],
+                [10,    1,       noise,  1],
+                [11,    1,       end,    1],
+                [12,    1,       noise,  1],
+                [13,    1,       end,    1],
+                [14,    1,       end,    1],
+                [15,    1,       end,    1]]
+
+        return data
+
+
+class LastStartLastEndInvalid(_LastStartLastEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       noise,  0],
+                [5,     1,       end,    0],
+                [6,     1,       noise,  0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       noise,  0],
+                [10,    1,       start,  1],
+                [11,    1,       noise,  1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       noise,  1],
+                [15,    1,       end,    1],
+                [16,    1,       noise,  0],
+                [17,    1,       start,  0],
+                [18,    1,       noise,  0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+class LastStartLastEndInvalidMissing(_LastStartLastEnd, _SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid
+        data = [[1,     1,       end,    0],
+                [2,     1,       end,    0],
+                [3,     1,       end,    0],
+                [4,     1,       NULL,   0],
+                [5,     1,       end,    0],
+                [6,     1,       NULL,   0],
+                [7,     1,       start,  0],
+                [8,     1,       start,  0],
+                [9,     1,       NULL,   0],
+                [10,    1,       start,  1],
+                [11,    1,       NULL,   1],
+                [12,    1,       end,    1],
+                [13,    1,       end,    1],
+                [14,    1,       NULL,   1],
+                [15,    1,       end,    1],
+                [16,    1,       NULL,   0],
+                [17,    1,       start,  0],
+                [18,    1,       NULL,   0],
+                [19,    1,       start,  0],
+                [20,    1,       start,  0],
+                [21,    1,       start,  0]]
+
+        return data
+
+
+CollectionMarkerSpecifics = TestCollection([
+    LastStartLastEndValid,
+    LastStartLastEndInvalid,
+    LastStartLastEndInvalidMissing,
+    LastStartFirstEndValid,
+    LastStartFirstEndInvalid,
+    LastStartFirstEndInvalidMissing,
+    FirstStartLastEndValid,
+    FirstStartLastEndInvalid,
+    FirstStartLastEndInvalidMissing,
+    FirstStartFirstEndValid,
+    FirstStartFirstEndInvalid,
+    FirstStartFirstEndInvalidMissing,
+])
+
+
+class ResultTypeRawIids(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       noise,  0],
+                [2,     1,       start,  1],
+                [3,     1,       end,    1],
+                [4,     1,       noise,  2],
+                [5,     1,       start,  3],
+                [6,     1,       noise,  3],
+                [7,     1,       end,    3],
+                [8,     1,       noise,  4],
+                [9,     1,       noise,  4],
+                [10,    1,       start,  5],
+                [11,    1,       noise,  5],
+                [12,    1,       end,    5],
+                [13,    1,       start,  6],
+                [14,    1,       end,    6]]
+
+        return data
+
+
+class ResultTypeValidIids(_SingleOrderGroup):
+
+    def data(self):
+        start = self.marker_start
+        noise = self.marker_noise
+        end = self.marker_end
+
+        # cols:  order, groupby, marker, iid"""
+        data = [[1,     1,       end,    0],
+                [2,     1,       noise,  0],
+                [3,     1,       end,    0],
+                [4,     1,       start,  5],
+                [5,     1,       noise,  5],
+                [6,     1,       end,    5],
+                [7,     1,       noise,  0],
+                [8,     1,       start,  4],
+                [9,     1,       end,    4],
+                [10,    1,       start,  9],
+                [11,    1,       noise,  9],
+                [12,    1,       end,    9],
+                [13,    1,       start,  0],
+                [14,    1,       start,  0]]
+
+        return data
+
+
+MISSING_ORDER_GROUP_BY = {'no_order': {'groupby_columns': 'groupby',
+                                       'orderby_columns': None,
+                                       'ascending': None},
+                          'no_groupby': {'groupby_columns': None,
+                                         'orderby_columns': 'order'},
+                          'no_order_no_groupby': {'groupby_columns': None,
+                                                  'orderby_columns': None,
+                                                  'ascending': None}}
+
+CollectionNoOrderGroupBy = TestCollection([
+    NoInterval,
+    NoIntervalInvalidStart,
+    NoIntervalInvalidEnd,
+    SingleInterval,
+    SingleIntervalStartsWith,
+    SingleIntervalEndsWith,
+    SingleIntervalSpanning,
+    SingleIntervalSpanningGroupby]
+    , test_kwargs={"missing_order_group_by": MISSING_ORDER_GROUP_BY})
