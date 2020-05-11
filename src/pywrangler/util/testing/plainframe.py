@@ -579,7 +579,11 @@ class PlainFrame(_ImmutablePlainFrame):
 
         # transpose data if row wise
         if row_wise:
-            data = zip(*data)
+            data = list(zip(*data))
+
+        # handle empty data GH#29
+        if not data:
+            data = [[]] * len(columns)
 
         # instantiate PlainColumns
         zipped = zip(columns, dtypes, data)
