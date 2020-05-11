@@ -156,7 +156,7 @@ def test_plainframe():
         PlainFrame(plaincolumns=[1])
 
 
-def test_empty_plainframe():
+def test_plainframe_from_plain_pandas_empty():
     # tests GH#29
     df = PlainFrame.from_plain(data=[], columns=["col1:int", "col2:str"])
     col_values = lambda x: df.get_column(x).values
