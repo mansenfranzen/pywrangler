@@ -156,6 +156,28 @@ def test_plainframe():
         PlainFrame(plaincolumns=[1])
 
 
+def test_plainframe_from_plain_pandas_empty():
+    # tests GH#29
+    df = PlainFrame.from_plain(data=[], columns=["col1:int", "col2:str"])
+    col_values = lambda x: df.get_column(x).values
+
+    assert df.n_rows == 0
+    assert df.columns == ["col1", "col2"]
+    assert df.dtypes == ["int", "str"]
+    assert col_values("col1") == tuple()
+    assert col_values("col2") == tuple()
+
+    dfp = pd.DataFrame(columns=["col1", "col2"], dtype=int)
+    df = PlainFrame.from_pandas(dfp)
+    col_values = lambda x: df.get_column(x).values
+
+    assert df.n_rows == 0
+    assert df.columns == ["col1", "col2"]
+    assert df.dtypes == ["int", "int"]
+    assert col_values("col1") == tuple()
+    assert col_values("col2") == tuple()
+
+
 def test_plainframe_attributes(plainframe_missings):
     df = plainframe_missings
     col_values = lambda x: df.get_column(x).values
