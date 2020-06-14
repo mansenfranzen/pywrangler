@@ -109,13 +109,56 @@ If you intend to write tests for data wranglers, it is highly recommended to use
 :any:`DataTestCase` which allows a computation engine independent test case formulation. This has
 three major goals in mind:
 
-- unify and standardize test data formulation across different computation engines
-- test data should be as readable as possible and should be maintainable in pure python
-- make writing data centric tests as easy as possible while reducing the need of test case related boilerplate code
+- Unify and standardize test data formulation across different computation engines.
+- Test data should be as readable as possible and should be maintainable in pure python.
+- Make writing data centric tests as easy as possible while reducing the need of test case related boilerplate code.
 
 Actually, once you've formulated a test case via the :any:`DataTestCase`, you may easily test it
 with any computation backend. Behind the scences, an computation engine independent dataframe called
 :any:`PlainFrame` converts the provided test data to the specific test engine.
+
+Example
+=======
+
+Lets start with an easy example which should be self explanatory:
+
+.. code-block:: python
+   :linenos:
+   
+   from pywrangler.util.testing import DataTestCase
+   
+   class AddOneTest(DataTestCase):
+      """Represents a test for adding one to specified column.
+      
+      """
+      
+      COLUMN_TYPES = ["col1:int", "col2:str"]
+      
+      def input(self):
+         """Provide the data given to the data wrangler."""
+         
+         data = [[1, "a"],
+                 [2, "b"],
+                 [3, "c"]]
+             
+         return data, self.COLUMN_TYPES
+         
+      def output(self):
+         """Provide the data expected from the data wrangler."""
+         
+         data = [[2, "a"],
+                 [3, "b"],
+                 [4, "c"]]
+             
+         return data, self.COLUMN_TYPES
+         
+Testing a data transformation essientially requires the provided input data along with the expected
+output data. 
+
+.. note::
+
+   :any:`DataTestCase` currently supports only single input and output data wranglers. Data wranglers 
+   requiring multiple input dataframes or computing multiple output dataframes are not supported, yet.
 
 -----------------------
 Building & writing docs
