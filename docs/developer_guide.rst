@@ -101,59 +101,104 @@ for python 3.7), you will need provide the environment abbreviation directly:
    
 Please refer to the `tox.ini`_ to see all available environments.
 
--------------
-Writing tests
--------------
+--------------------------------
+Writing tests for data wranglers
+--------------------------------
 
-If you intend to write tests for data wranglers, it is highly recommended to use pywrangler's
-:any:`DataTestCase` which allows a computation engine independent test case formulation. This has
-three major goals in mind:
+When writing tests for data wranglers, it is highly recommended to use pywrangler's
+:any:`DataTestCase`. It allows a computation engine independent test case formulation
+with three major goals in mind:
 
 - Unify and standardize test data formulation across different computation engines.
-- Test data should be as readable as possible and should be maintainable in pure python.
-- Make writing data centric tests as easy as possible while reducing the need of test case related boilerplate code.
+- Let test data be as readable and maintainable as possible.
+- Make writing data centric tests easy while reducing boilerplate code.
 
-Actually, once you've formulated a test case via the :any:`DataTestCase`, you may easily test it
-with any computation backend. Behind the scences, an computation engine independent dataframe called
-:any:`PlainFrame` converts the provided test data to the specific test engine.
+.. note::
+
+   Once a test is formulated with the :any:`DataTestCase`, you may easily convert it
+   to any computation backend. Behind the scences, an computation engine independent dataframe called
+   :any:`PlainFrame` converts the provided test data to the specific test engine.
 
 Example
 =======
 
-Lets start with an easy example which should be self explanatory:
+Lets start with an easy example. Imagine a data transformation for time series which
+increases a counter each time it encounters a specific target signal.
+
+Essentially, a data tranfsormation focused test case requires two things: First, the input data
+which needs to be processed. Second, the output data which is expected as a result of the data
+wrangling stage:
 
 .. code-block:: python
    :linenos:
    
    from pywrangler.util.testing import DataTestCase
    
-   class AddOneTest(DataTestCase):
-      """Represents a test for adding one to specified column.
+   class IncreaseOneTest(DataTestCase):
       
-      """
-      
-      COLUMN_TYPES = ["col1:int", "col2:str"]
-      
-      def input(self):
+      def input(self):        
          """Provide the data given to the data wrangler."""
          
-         data = [[1, "a"],
-                 [2, "b"],
-                 [3, "c"]]
+         cols = ["order:int", "signal:str"]
+         data = [[    1,       "noise"],
+                 [    2,       "target"],
+                 [    3,       "noise"],
+                 [    4,       "noise"],
+                 [    5,       "target"]]
              
-         return data, self.COLUMN_TYPES
+         return data, cols
          
       def output(self):
          """Provide the data expected from the data wrangler."""
          
-         data = [[2, "a"],
-                 [3, "b"],
-                 [4, "c"]]
-             
-         return data, self.COLUMN_TYPES
+         cols = ["order:int", "signal:str", "result:int"]
+         data = [[    1,       "noise",          0],
+                 [    2,       "target",         1],
+                 [    3,       "noise",          1],
+                 [    4,       "noise",          1],
+                 [    5,       "target",         2]]
+                 
+         return data, cols
          
-Testing a data transformation essientially requires the provided input data along with the expected
-output data. 
+That's all you need to do in order define a data test case. As you can see, typed columns
+are provided along with the corresponding data in a human readable format.
+
+Next, let's write two different implementations using pandas and pyspark and test them
+against the :code:`IncreaseOneTest`:
+
+.. code-block:: python
+   :linenos:
+   
+   import pandas as pd
+   from pyspark.sql import functions as F, DataFrame, Window
+   
+   def transform_pandas(df: pd.DataFrame) -> pd.DataFrame:      
+       df = df.sort_values("order")
+       result = df["signal"].eq("target").cumsum()
+      
+       return df.assign(result=result)
+      
+   def transform_pyspark(df: DataFrame) -> DataFrame:
+       target = F.col("signal").eqNullSafe("target").cast("integer")
+       result = F.sum(target).over(Window.orderby("order"))
+       
+       return df.withColumn(result=result)
+      
+   # instantiate test case
+   test_case = IncreaseOneTest()
+   
+   # perform test assertions for given computation backends
+   test_case.test.pandas(transform_pandas)
+   test_case.test.pyspark(transform_pyspark)
+
+The single test case :code:`IncreaseOneTest` can be used to test multiple implementations 
+based on different computation engines.
+
+The :any:`DataTestCase` and :any:`PlainFrame` offer much more functionality which is covered
+in the corresponding reference pages. For example, you may use :any:`PlainFrame` to seamlessly 
+convert between pandas and pyspark dataframes. :any:`DataTestCase` allows to formulate mutants
+of the input data which should cause the test to fail (hence covering multiple distinct but 
+similar test data scenarios within the same data test case).
 
 .. note::
 
