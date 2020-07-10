@@ -48,9 +48,10 @@ def validate_columns(df: DataFrame, columns: TYPE_COLUMNS):
     """
 
     columns = ensure_iterable(columns)
+    compare_columns = {column.lower() for column in df.columns}
 
     for column in columns:
-        if column not in df.columns:
+        if column.lower() not in compare_columns:
             raise ValueError('Column with name `{}` does not exist. '
                              'Please check parameter settings.'
                              .format(column))
