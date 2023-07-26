@@ -539,7 +539,7 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
             ff_window)
 
         # shifting marker_col forward
-        shift_col = F.lag(forward_fill_col, default=default, count=1) \
+        shift_col = F.lag(forward_fill_col, default=default, offset=1) \
             .over(window) \
             .cast("integer")
 
