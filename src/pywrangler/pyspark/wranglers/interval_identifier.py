@@ -163,7 +163,12 @@ class VectorizedCumSum(PySparkSingleNoFit, IntervalIdentifier):
         mask_only = denoised == marker
 
         # use shifted column to identify subsequent duplicates
-        shifted = F.lag(denoised, count=count_lag).over(window)
+        try:
+            # keep this code for backwards compatibility
+            shifted = F.lag(denoised, count=count_lag).over(window)
+        except TypeError:
+            # signature of the function changed in PySpark 3.0.0
+            shifted = F.lag(denoised, offset=count_lag).over(window)
         shifted_start_only = F.when(mask_only, shifted)
 
         # nullify duplicates
@@ -539,7 +544,7 @@ class VectorizedCumSumAdjusted(VectorizedCumSum):
             ff_window)
 
         # shifting marker_col forward
-        shift_col = F.lag(forward_fill_col, default=default, offset=1) \
+        shift_col = F.lag(forward_fill_col, default=default) \
             .over(window) \
             .cast("integer")
 
