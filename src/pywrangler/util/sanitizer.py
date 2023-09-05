@@ -46,7 +46,7 @@ def ensure_iterable(values: Any, seq_type: Type = list,
             return seq_type()
 
     # if not iterable, return iterable with single value
-    elif not isinstance(values, collections.Iterable):
+    elif not isinstance(values, collections.abc.Iterable):
         return seq_type([values])
 
     # handle exception which are iterable but still count as one value
